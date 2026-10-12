@@ -1,0 +1,199 @@
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+@import "@fontsource/ibm-plex-mono/latin-600.css";
+@import "tailwindcss";
+
+@theme {
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --spacing-admin: 30rem;
+  --color-bg: #07090c;
+  --color-panel: #0d1116;
+  --color-hover: #151b22;
+  --color-line: #1e2833;
+  --color-line-lit: #314255;
+  --color-fg: #c5d0db;
+  --color-bright: #e7eef5;
+  --color-dim: #8b9aab;
+  --color-cyan: #5ad4ff;
+  --color-cyan-dim: #1c5f78;
+  --color-rose: #ff6b9d;
+  --color-rose-dim: #7a2948;
+  --color-rose-soft: #ffd0e0;
+  --color-amber: #e4b23a;
+  --color-danger: #f05252;
+  --color-ok: #3dba7c;
+  --color-violet: #b388ff;
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-mono);
+    -webkit-font-smoothing: antialiased;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--color-cyan) 35%, transparent);
+    color: var(--color-bright);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-lit) transparent;
+  }
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="color"] {
+    color-scheme: dark;
+  }
+  input[type="range"] {
+    accent-color: var(--color-cyan);
+    width: 100%;
+  }
+}
+
+@layer components {
+  .term-btn {
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    line-height: 1.2;
+  }
+  .scanlines {
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 3px,
+      rgb(0 0 0 / 0.07) 3px,
+      rgb(0 0 0 / 0.07) 4px
+    );
+  }
+  .login-frame {
+    animation: pulse-border 3.2s ease-in-out infinite;
+  }
+  .blink {
+    animation: blink 2.4s steps(2, end) infinite;
+  }
+  .file-in {
+    animation: item-in 0.18s ease both;
+  }
+  .doc-in {
+    animation: doc-in 0.22s ease both;
+  }
+  .glitch-text {
+    animation: glitch-shift 0.18s infinite;
+  }
+  .viewer-scan {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 3px;
+    pointer-events: none;
+    background: linear-gradient(transparent, var(--color-cyan), transparent);
+    animation: scan-down 0.65s ease-out forwards;
+    z-index: 2;
+  }
+  .header-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+  .header-sheen::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 18%;
+    background: linear-gradient(to right, transparent, rgb(90 212 255 / 0.07), transparent);
+    animation: header-sheen 8s linear infinite;
+    pointer-events: none;
+  }
+}
+
+@keyframes pulse-border {
+  0%,
+  100% {
+    border-color: var(--color-line-lit);
+  }
+  50% {
+    border-color: var(--color-cyan-dim);
+  }
+}
+@keyframes blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes doc-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes glitch-shift {
+  0% {
+    text-shadow: 2px 0 var(--color-danger), -2px 0 var(--color-cyan);
+  }
+  50% {
+    text-shadow: -2px 0 var(--color-danger), 2px 0 var(--color-cyan);
+  }
+  100% {
+    text-shadow: 2px 0 var(--color-danger), -2px 0 var(--color-cyan);
+  }
+}
+@keyframes scan-down {
+  from {
+    top: 0;
+    opacity: 0.8;
+  }
+  to {
+    top: 100%;
+    opacity: 0;
+  }
+}
+@keyframes header-sheen {
+  from {
+    transform: translateX(-40%);
+  }
+  to {
+    transform: translateX(640%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-frame,
+  .blink,
+  .file-in,
+  .doc-in,
+  .glitch-text,
+  .viewer-scan,
+  .header-sheen::after {
+    animation: none !important;
+  }
+}

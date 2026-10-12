@@ -1,0 +1,2541 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OrionSoftware — Terminal</title>
+  <style>
+    /* ── Tokens ───────────────────────────────────────── */
+    :root {
+      --bg:          #0a0c10;
+      --bg-panel:    #0d1117;
+      --bg-hover:    #161b22;
+      --border:      #1e2733;
+      --border-lit:  #2d3f52;
+      --cyan:        #58d4ff;
+      --cyan-dim:    #1d5f7a;
+      --violet:      #b388ff;
+      --violet-dim:  #4a2d7a;
+      --npc:         #ff6b9d;
+      --npc-dim:     #7a1f40;
+      --text:        #8b97a8;
+      --text-bright: #c9d4e0;
+      --text-dim:    #3d4f60;
+      --danger:      #f05050;
+      --ok:          #4caf7d;
+      --font:        'Courier New', Courier, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ───────────────────────────────────────── */
+    header {
+      height: 40px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      background: var(--bg-panel);
+    }
+
+    .logo {
+      color: var(--cyan);
+      font-size: 12px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .conn-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .conn-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--ok);
+      animation: blink 2.5s infinite;
+    }
+    .conn-dot.offline { background: var(--danger); animation: none; }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── Scan line ambiental ──────────────────────────── */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 3px,
+        rgba(0,0,0,0.08) 3px,
+        rgba(0,0,0,0.08) 4px
+      );
+      z-index: 9999;
+    }
+
+    /* ── Abertura do viewer (doc) ─────────────────────── */
+    @keyframes doc-appear {
+      0%   { opacity: 0; transform: translateY(6px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .doc-enter {
+      animation: doc-appear 0.22s ease forwards;
+    }
+    /* título e meta aparecem sequencialmente */
+    .doc-enter .doc-title {
+      animation: doc-appear 0.18s ease 0.02s both;
+    }
+    .doc-enter .doc-meta {
+      animation: doc-appear 0.18s ease 0.08s both;
+    }
+    .doc-enter .doc-content {
+      animation: doc-appear 0.22s ease 0.14s both;
+    }
+    .doc-enter .doc-image {
+      animation: doc-appear 0.28s ease 0.22s both;
+    }
+
+    /* ── Efeito de scan ao abrir o arquivo ───────────── */
+    @keyframes scan-down {
+      0%   { top: 0; opacity: 0.5; }
+      80%  { opacity: 0.3; }
+      100% { top: 100%; opacity: 0; }
+    }
+    .viewer {
+      position: relative;
+    }
+    .viewer-scan {
+      position: absolute;
+      left: 0; right: 0;
+      top: 0;
+      height: 3px;
+      background: linear-gradient(to bottom, transparent, var(--cyan), transparent);
+      pointer-events: none;
+      animation: scan-down 0.55s ease-out forwards;
+      z-index: 10;
+    }
+
+    /* ── Itens do explorador ──────────────────────────── */
+    @keyframes item-slide-in {
+      0%   { opacity: 0; transform: translateX(-6px); }
+      100% { opacity: 1; transform: translateX(0); }
+    }
+    .file-item {
+      animation: item-slide-in 0.15s ease both;
+    }
+
+    /* ── Hover nos file-items com glow sutil ─────────── */
+    .file-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-bright);
+      box-shadow: inset 2px 0 0 var(--cyan-dim);
+    }
+    .file-item.active {
+      box-shadow: inset 2px 0 0 var(--cyan);
+    }
+    .file-item.folder:hover {
+      box-shadow: inset 2px 0 0 var(--violet-dim);
+    }
+    .file-item.folder.active {
+      box-shadow: inset 2px 0 0 var(--violet);
+    }
+    .file-item.locked:hover {
+      box-shadow: inset 2px 0 0 #c8a020;
+    }
+
+    /* ── Cursor piscando no título do doc ────────────── */
+    @keyframes cursor-blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+    .doc-title::after {
+      content: "█";
+      font-size: 12px;
+      margin-left: 6px;
+      animation: cursor-blink 1s step-end infinite;
+      color: var(--cyan-dim);
+    }
+
+    /* ── Novas mensagens no chat ──────────────────────── */
+    @keyframes msg-pop {
+      0%   { opacity: 0; transform: translateX(-4px); }
+      100% { opacity: 1; transform: translateX(0); }
+    }
+    .msg-new {
+      animation: msg-pop 0.18s ease both;
+    }
+
+    /* ── Login box — pulso na borda ───────────────────── */
+    @keyframes border-pulse {
+      0%, 100% { border-color: var(--border-lit); }
+      50%       { border-color: var(--cyan-dim); }
+    }
+    .login-box {
+      animation: border-pulse 3s ease-in-out infinite;
+    }
+
+    /* ── Placeholder do viewer — pulso no glyph ──────── */
+    @keyframes glyph-pulse {
+      0%, 100% { color: var(--border-lit); text-shadow: none; }
+      50%       { color: var(--text-dim); text-shadow: 0 0 12px var(--cyan-dim); }
+    }
+    .viewer-placeholder .glyph {
+      animation: glyph-pulse 2.8s ease-in-out infinite;
+    }
+
+    /* ── Scan line no header ──────────────────────────── */
+    @keyframes header-scan {
+      0%   { left: -20%; }
+      100% { left: 110%; }
+    }
+    header {
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: "";
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 20%;
+      background: linear-gradient(to right, transparent, rgba(88,212,255,0.04), transparent);
+      animation: header-scan 6s linear infinite;
+      pointer-events: none;
+    }
+
+    /* ── Workspace ────────────────────────────────────── */
+    .workspace {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Explorer ─────────────────────────────────────── */
+    .explorer {
+      width: 260px;
+      min-width: 180px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-panel);
+      flex-shrink: 0;
+    }
+
+    .panel-label {
+      padding: 9px 14px;
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .breadcrumb {
+      padding: 7px 14px;
+      font-size: 11px;
+      color: var(--cyan-dim);
+      border-bottom: 1px solid var(--border);
+      min-height: 32px;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      flex-wrap: wrap;
+      line-height: 1.4;
+    }
+    .breadcrumb span { cursor: pointer; }
+    .breadcrumb span:hover { color: var(--cyan); }
+    .breadcrumb .sep { color: var(--text-dim); user-select: none; }
+
+    .file-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+    .file-list::-webkit-scrollbar { width: 3px; }
+    .file-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text);
+      transition: background 0.1s, color 0.1s;
+    }
+    .file-item .file-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-item .file-size {
+      flex-shrink: 0;
+      color: var(--text-dim);
+      font-size: 10px;
+      letter-spacing: 0.5px;
+    }
+    .file-item:hover .file-size,
+    .file-item.active .file-size { color: var(--cyan-dim); }
+    .file-item:hover   { background: var(--bg-hover); color: var(--text-bright); }
+    .file-item.active  { background: rgba(88,212,255,0.07); color: var(--cyan); }
+    .file-item .icon   { flex-shrink: 0; color: var(--cyan-dim); font-size: 11px; width: 14px; }
+    .file-item.folder .icon { color: var(--violet-dim); }
+    .file-item.back-item  { color: var(--text-dim); }
+    .file-item.locked .icon  { color: #c8a020; }
+    .file-item.locked        { color: #a8882a; }
+    .file-item.locked:hover  { color: #e8c040; }
+    .file-item.locked.active { color: #e8c040; background: rgba(200,160,32,0.07); }
+    .file-item.corrupted .icon { color: var(--danger); }
+
+    /* ── Password prompt overlay ──────────────────────── */
+    .pw-prompt {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-top: 60px;
+      color: var(--text-dim);
+    }
+    .pw-prompt .glyph { font-size: 32px; color: #c8a020; display: block; margin-bottom: 4px; }
+    .pw-prompt .pw-label { font-size: 10px; letter-spacing: 3px; color: var(--text-dim); text-transform: uppercase; }
+    .pw-prompt .pw-row { display: flex; gap: 8px; }
+    .pw-prompt input[type="password"] {
+      background: var(--bg);
+      border: 1px solid var(--border-lit);
+      color: var(--text-bright);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 6px 10px;
+      outline: none;
+      width: 200px;
+    }
+    .pw-prompt input[type="password"]:focus { border-color: #c8a020; }
+    .pw-prompt .pw-err { color: var(--danger); font-size: 11px; letter-spacing: 1px; min-height: 16px; }
+    .pw-prompt .a-btn { background: var(--bg); border: 1px solid #c8a020; color: #c8a020; font-family: var(--font); font-size: 11px; letter-spacing: 2px; padding: 6px 14px; cursor: pointer; }
+    .pw-prompt .a-btn:hover { background: rgba(200,160,32,0.1); }
+
+    /* ── Corrupted text effect ────────────────────────── */
+    @keyframes glitch-shift {
+      0%   { text-shadow: 2px 0 var(--danger), -2px 0 var(--cyan); }
+      25%  { text-shadow: -2px 0 var(--danger), 2px 0 var(--cyan); }
+      50%  { text-shadow: 1px 2px var(--violet), -1px -2px var(--danger); }
+      75%  { text-shadow: 0 0 transparent; }
+      100% { text-shadow: 2px 0 var(--danger), -2px 0 var(--cyan); }
+    }
+    .corrupted-content {
+      color: var(--text-bright);
+      line-height: 1.85;
+      white-space: pre-wrap;
+      font-size: 13px;
+      animation: glitch-shift 0.18s infinite;
+      user-select: none;
+    }
+    .corrupted-banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      padding: 8px 12px;
+      border: 1px solid var(--danger);
+      color: var(--danger);
+      font-size: 10px;
+      letter-spacing: 2px;
+    }
+
+    .empty-note {
+      padding: 18px 14px;
+      color: var(--text-dim);
+      font-size: 11px;
+    }
+
+    /* ── Main area ────────────────────────────────────── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Viewer ───────────────────────────────────────── */
+    .viewer {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+    }
+    .viewer::-webkit-scrollbar { width: 3px; }
+    .viewer::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .viewer-placeholder {
+      color: var(--text-dim);
+      margin-top: 60px;
+      text-align: center;
+      line-height: 2.2;
+    }
+    .viewer-placeholder .glyph {
+      font-size: 32px;
+      color: var(--border-lit);
+      margin-bottom: 10px;
+      display: block;
+    }
+    .viewer-placeholder small {
+      font-size: 10px;
+      letter-spacing: 2px;
+    }
+
+    .doc-title {
+      color: var(--cyan);
+      font-size: 15px;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      letter-spacing: 1px;
+    }
+    .doc-meta {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+      letter-spacing: 1px;
+    }
+    .doc-content {
+      color: var(--text-bright);
+      line-height: 1.85;
+      white-space: pre-wrap;
+      font-size: 13px;
+    }
+    .doc-image {
+      max-width: 100%;
+      margin-top: 20px;
+      border: 1px solid var(--border);
+      display: block;
+    }
+
+    /* ── Chat ─────────────────────────────────────────── */
+    .chat-panel {
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: 230px;
+      flex-shrink: 0;
+      background: var(--bg-panel);
+    }
+
+    .chat-top {
+      padding: 7px 14px;
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 3px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chat-top .operator-tag { color: var(--violet); font-size: 10px; }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .chat-messages::-webkit-scrollbar { width: 3px; }
+    .chat-messages::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .msg { font-size: 12px; line-height: 1.5; }
+    .msg .who { font-weight: bold; }
+    .msg.npc    .who { color: var(--npc); }
+    .msg.player .who { color: var(--cyan); }
+    .msg .ts { color: var(--text-dim); font-size: 10px; margin-left: 5px; }
+    .msg .body { color: var(--text-bright); }
+
+    .msg.npc .body { color: #ffd0e0; }
+
+    .chat-input-row {
+      display: flex;
+      border-top: 1px solid var(--border);
+      align-items: center;
+    }
+    .chat-prompt {
+      padding: 0 10px;
+      color: var(--violet);
+      font-size: 13px;
+      user-select: none;
+    }
+    .chat-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-bright);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 10px 0;
+      caret-color: var(--violet);
+    }
+    .chat-send {
+      background: transparent;
+      border: none;
+      border-left: 1px solid var(--border);
+      color: var(--text-dim);
+      font-family: var(--font);
+      font-size: 11px;
+      padding: 10px 14px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: color 0.15s;
+    }
+    .chat-send:hover { color: var(--violet); }
+
+    /* ── Modal de login ───────────────────────────────── */
+    #name-modal {
+      position: fixed; inset: 0;
+      background: rgba(10,12,16,0.97);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    .login-box {
+      border: 1px solid var(--border-lit);
+      background: var(--bg-panel);
+      padding: 36px 44px;
+      min-width: 340px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .login-box .sys-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 3px;
+      margin-bottom: 20px;
+    }
+    .login-box h2 {
+      color: var(--cyan);
+      font-size: 18px;
+      letter-spacing: 5px;
+      margin-bottom: 6px;
+    }
+    .login-box .subtitle {
+      color: var(--text-dim);
+      font-size: 11px;
+      letter-spacing: 1px;
+      margin-bottom: 28px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 20px;
+    }
+    .login-field-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+    }
+    .login-box input {
+      background: var(--bg);
+      border: 1px solid var(--border-lit);
+      color: var(--cyan);
+      font-family: var(--font);
+      font-size: 14px;
+      padding: 10px 12px;
+      width: 100%;
+      outline: none;
+      margin-bottom: 20px;
+      letter-spacing: 2px;
+    }
+    .login-box input:focus { border-color: var(--cyan-dim); }
+    .login-box button {
+      background: transparent;
+      border: 1px solid var(--cyan-dim);
+      color: var(--cyan);
+      font-family: var(--font);
+      font-size: 12px;
+      padding: 10px;
+      cursor: pointer;
+      letter-spacing: 3px;
+      transition: border-color 0.15s, background 0.15s;
+      width: 100%;
+    }
+    .login-box button:hover { border-color: var(--cyan); background: rgba(88,212,255,0.05); }
+
+    /* ── Admin panel ──────────────────────────────────── */
+    #admin-panel {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(10,12,16,0.97);
+      z-index: 200;
+      flex-direction: column;
+    }
+    #admin-panel.open { display: flex; }
+
+    .admin-header {
+      height: 40px;
+      padding: 0 16px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--npc-dim);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .admin-title { color: var(--npc); font-size: 11px; letter-spacing: 4px; }
+    .admin-close {
+      background: transparent;
+      border: 1px solid var(--npc-dim);
+      color: var(--npc);
+      font-family: var(--font);
+      font-size: 11px;
+      padding: 4px 12px;
+      cursor: pointer;
+      letter-spacing: 1px;
+    }
+    .admin-close:hover { background: rgba(240,80,80,0.1); }
+
+    .admin-body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .admin-sidebar {
+      width: 200px;
+      border-right: 1px solid var(--border);
+      background: var(--bg-panel);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .admin-nav-item {
+      padding: 11px 16px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s, color 0.1s;
+      letter-spacing: 1px;
+    }
+    .admin-nav-item:hover    { background: var(--bg-hover); color: var(--text-bright); }
+    .admin-nav-item.active   { color: var(--npc); background: rgba(255,107,157,0.07); }
+
+    .admin-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+    }
+    .admin-content::-webkit-scrollbar { width: 3px; }
+    .admin-content::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .admin-section { display: none; }
+    .admin-section.active { display: block; }
+
+    .admin-section h3 {
+      color: var(--npc);
+      font-size: 12px;
+      letter-spacing: 3px;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--npc-dim);
+    }
+
+    /* admin forms */
+    .a-group { margin-bottom: 16px; }
+    .a-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .a-input, .a-select, .a-textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border-lit);
+      color: var(--text-bright);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 8px 10px;
+      outline: none;
+    }
+    .a-input:focus, .a-select:focus, .a-textarea:focus { border-color: var(--npc-dim); }
+    .a-textarea { resize: vertical; min-height: 100px; }
+    .a-select option { background: var(--bg-panel); }
+
+    .a-btn {
+      background: transparent;
+      border: 1px solid var(--npc-dim);
+      color: var(--npc);
+      font-family: var(--font);
+      font-size: 11px;
+      padding: 8px 18px;
+      cursor: pointer;
+      letter-spacing: 2px;
+      transition: background 0.15s;
+    }
+    .a-btn:hover { background: rgba(255,107,157,0.08); }
+    .a-btn.secondary {
+      border-color: var(--border-lit);
+      color: var(--text-dim);
+    }
+    .a-btn.secondary:hover { color: var(--text-bright); }
+
+    .a-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .a-list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .a-list-item .a-del {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-family: var(--font);
+      cursor: pointer;
+      font-size: 11px;
+      padding: 2px 6px;
+    }
+    .a-list-item .a-del:hover { color: var(--danger); }
+
+    .user-list { display: flex; flex-direction: column; gap: 8px; }
+
+    /* ── Agrupamento por IP ── */
+    .ip-group {
+      border: 1px solid var(--border);
+    }
+    .ip-group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .ip-group-header:hover { background: var(--bg-hover); }
+    .ip-group-header .ip-addr {
+      color: var(--cyan);
+      font-weight: bold;
+      letter-spacing: 1px;
+      font-size: 12px;
+    }
+    .ip-group-header .ip-meta {
+      color: var(--text-dim);
+      font-size: 10px;
+      margin-top: 3px;
+    }
+    .ip-group-header .ip-chevron {
+      color: var(--text-dim);
+      font-size: 11px;
+      transition: transform 0.15s;
+      flex-shrink: 0;
+      margin-left: 10px;
+    }
+    .ip-group.open .ip-chevron { transform: rotate(90deg); }
+    .ip-group-body {
+      display: none;
+      border-top: 1px solid var(--border);
+      padding: 8px 12px;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .ip-group.open .ip-group-body { display: flex; }
+    .ip-count-badge {
+      display: inline-block;
+      border: 1px solid var(--border-lit);
+      color: var(--text-dim);
+      font-size: 10px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      margin-left: 8px;
+      letter-spacing: 1px;
+    }
+
+    .user-card {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      color: var(--text);
+      font-size: 12px;
+    }
+    .user-name { color: var(--cyan); font-weight: bold; letter-spacing: 1px; }
+    .user-meta { color: var(--text-dim); font-size: 10px; margin-top: 4px; }
+    .user-color-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+    .user-color-row input[type="color"] {
+      width: 22px; height: 22px;
+      padding: 0; border: 1px solid var(--border);
+      background: none; cursor: pointer;
+    }
+    .user-color-row .color-reset {
+      font-size: 10px; color: var(--text-dim);
+      cursor: pointer; text-decoration: underline;
+      background: none; border: none; font-family: var(--font);
+    }
+    .user-color-row .color-reset:hover { color: var(--text-bright); }
+    .perm-btn.is-on { border-color: var(--ok); color: var(--ok); }
+    .perm-btn.is-off { border-color: var(--danger); color: var(--danger); }
+    .perm-btn.is-pending { border-color: var(--violet); color: var(--violet); box-shadow: 0 0 0 1px var(--violet) inset; }
+    .perm-btn.is-pending::after { content: " *"; }
+
+    .user-card.has-pending { border-color: var(--violet-dim); }
+
+    #adm-pending-count {
+      margin-left: 6px;
+      font-size: 10px;
+      color: var(--violet);
+    }
+    .a-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .a-btn:disabled:hover { background: transparent; }
+
+    .feedback {
+      font-size: 11px;
+      padding: 8px 12px;
+      margin-top: 10px;
+      border-left: 2px solid var(--ok);
+      color: var(--ok);
+      display: none;
+    }
+    .feedback.err { border-color: var(--danger); color: var(--danger); }
+    .feedback.visible { display: block; }
+
+    /* chat messages admin */
+    .admin-chat-msg {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .admin-chat-msg .who { font-weight: bold; }
+    .admin-chat-msg.is-npc .who { color: var(--npc); }
+    .admin-chat-msg.is-player .who { color: var(--cyan); }
+  </style>
+</head>
+<body>
+
+<!-- ── Modal login ──────────────────────────────────────────── -->
+<div id="name-modal">
+  <div class="login-box">
+    <div class="sys-label">ORIONSOFTWARE SYSTEMS</div>
+    <h2>TERMINAL</h2>
+    <div class="subtitle">Acesso ao sistema requer identificação do operador</div>
+    <div class="login-field-label">IDENTIFICADOR</div>
+    <input id="name-input" type="text" placeholder="NOME_OPERADOR" maxlength="20" autocomplete="off" spellcheck="false" />
+    <button id="name-btn">► CONECTAR</button>
+  </div>
+</div>
+
+<!-- ── Admin panel ──────────────────────────────────────────── -->
+<div id="admin-panel">
+  <div class="admin-header">
+    <span class="admin-title">// PAINEL DE CONTROLE — NPC</span>
+    <button class="admin-close" id="admin-close-btn">✕ FECHAR</button>
+  </div>
+  <div class="admin-body">
+    <div class="admin-sidebar">
+      <div class="admin-nav-item active" data-section="chat">Mensagens</div>
+      <div class="admin-nav-item" data-section="events">Eventos</div>
+      <div class="admin-nav-item" data-section="folders">Pastas</div>
+      <div class="admin-nav-item" data-section="docs">Documentos</div>
+      <div class="admin-nav-item" data-section="users">Usuários</div>
+      <div class="admin-nav-item" data-section="clock">Relógio</div>
+    </div>
+    <div class="admin-content">
+
+      <!-- ── Chat admin ── -->
+      <div class="admin-section active" id="section-chat">
+        <h3>// CANAL DE COMUNICAÇÃO</h3>
+
+        <div class="a-group">
+          <label class="a-label">IDENTIDADE DO OPERADOR</label>
+          <div class="a-row" style="gap:8px;align-items:center;flex-wrap:wrap;">
+            <input class="a-input" id="adm-nick" placeholder="Nick (ex: ORION-CONTROL)" style="flex:1;min-width:120px;" maxlength="32" />
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:10px;color:var(--text-dim);">COR DO NICK</span>
+              <input type="color" id="adm-nick-color" value="#ff6b9d" title="Cor do nome" style="width:26px;height:26px;padding:0;border:1px solid var(--border);background:none;cursor:pointer;" />
+              <button class="a-btn secondary" id="adm-nick-color-reset" style="font-size:9px;padding:3px 7px;">padrão</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:10px;color:var(--text-dim);">COR DO TEXTO</span>
+              <input type="color" id="adm-text-color" value="#ffd0e0" title="Cor da mensagem" style="width:26px;height:26px;padding:0;border:1px solid var(--border);background:none;cursor:pointer;" />
+              <button class="a-btn secondary" id="adm-text-color-reset" style="font-size:9px;padding:3px 7px;">padrão</button>
+            </div>
+          </div>
+          <div style="margin-top:8px;font-size:10px;color:var(--text-dim);">
+            preview: <span id="adm-identity-preview" style="font-weight:bold;"></span>
+            <span id="adm-text-preview" style="margin-left:4px;"></span>
+          </div>
+        </div>
+
+        <div class="a-group">
+          <label class="a-label">MENSAGEM</label>
+          <textarea class="a-textarea" id="adm-msg" placeholder="Mensagem que o operador vai enviar..."></textarea>
+        </div>
+        <div class="a-row">
+          <button class="a-btn" id="adm-send-npc">► TRANSMITIR</button>
+          <button class="a-btn secondary" id="adm-clear-chat">LIMPAR HISTÓRICO</button>
+        </div>
+        <div class="feedback" id="fb-chat"></div>
+        <div style="margin-top:20px; border-top:1px solid var(--border); padding-top:16px;">
+          <div class="a-label">HISTÓRICO RECENTE</div>
+          <div id="adm-chat-history" style="max-height:260px;overflow-y:auto;"></div>
+        </div>
+      </div>
+
+      <!-- ── Eventos ── -->
+      <div class="admin-section" id="section-events">
+        <h3>// EVENTOS</h3>
+
+        <div class="a-group">
+          <label class="a-label">REVELAR / OCULTAR ARQUIVOS</label>
+          <div class="a-row" style="margin-bottom:10px;">
+            <button class="a-btn" id="evt-apply-btn" disabled>✓ APLICAR VISIBILIDADE<span id="evt-pending-count"></span></button>
+            <button class="a-btn secondary" id="evt-discard-btn" disabled>DESCARTAR</button>
+          </div>
+          <div class="feedback" id="fb-evt-files"></div>
+          <div id="evt-files-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">
+            <div class="empty-note">carregando...</div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:18px 0 16px;"></div>
+
+        <div class="a-group">
+          <label class="a-label">MENSAGENS PRÉ-PRONTAS</label>
+          <div id="evt-msg-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">
+            <div class="empty-note">nenhuma mensagem cadastrada</div>
+          </div>
+          <button class="a-btn secondary" id="evt-add-btn" style="width:100%;">+ NOVA MENSAGEM</button>
+        </div>
+
+        <div id="evt-form" style="display:none;border:1px solid var(--border);padding:14px;margin-top:10px;">
+          <div class="a-label" style="margin-bottom:10px;" id="evt-form-title">NOVA MENSAGEM</div>
+          <input type="hidden" id="evt-edit-id" value="" />
+          <div class="a-group">
+            <label class="a-label">RÓTULO (nome interno)</label>
+            <input class="a-input" id="evt-label" placeholder="ex: Alerta de intrusão" maxlength="60" />
+          </div>
+          <div class="a-group">
+            <label class="a-label">NICK DO REMETENTE</label>
+            <input class="a-input" id="evt-nick" placeholder="deixe vazio para usar padrão" maxlength="32" />
+          </div>
+          <div class="a-row" style="gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:10px;color:var(--text-dim);">COR DO NICK</span>
+              <input type="color" id="evt-nick-color" value="#ff6b9d" style="width:26px;height:26px;padding:0;border:1px solid var(--border);background:none;cursor:pointer;" />
+              <button class="a-btn secondary" id="evt-nick-color-reset" style="font-size:9px;padding:3px 7px;">padrão</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:10px;color:var(--text-dim);">COR DO TEXTO</span>
+              <input type="color" id="evt-text-color" value="#ffd0e0" style="width:26px;height:26px;padding:0;border:1px solid var(--border);background:none;cursor:pointer;" />
+              <button class="a-btn secondary" id="evt-text-color-reset" style="font-size:9px;padding:3px 7px;">padrão</button>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:10px;">
+            preview: <span id="evt-nick-preview" style="font-weight:bold;"></span>
+            <span id="evt-text-preview" style="margin-left:4px;">— prévia do texto</span>
+          </div>
+          <div class="a-group">
+            <label class="a-label">TEXTO DA MENSAGEM</label>
+            <textarea class="a-textarea" id="evt-msg" placeholder="Texto que será enviado no chat..." rows="3"></textarea>
+          </div>
+          <div class="a-row">
+            <button class="a-btn" id="evt-save-btn">SALVAR</button>
+            <button class="a-btn secondary" id="evt-cancel-btn">CANCELAR</button>
+          </div>
+          <div class="feedback" id="fb-events"></div>
+        </div>
+      </div>
+
+      <!-- ── Usuarios admin ── -->
+      <div class="admin-section" id="section-users">
+        <h3>// OPERADORES</h3>
+        <div class="a-row" style="margin-bottom:14px;">
+          <button class="a-btn secondary" id="adm-refresh-users">ATUALIZAR LISTA</button>
+          <button class="a-btn" id="adm-apply-users" disabled>✓ APLICAR ALTERAÇÕES<span id="adm-pending-count"></span></button>
+          <button class="a-btn secondary" id="adm-discard-users" disabled>DESCARTAR</button>
+        </div>
+        <div class="feedback" id="fb-users"></div>
+        <div class="user-list" id="adm-user-list">
+          <div class="empty-note">nenhum operador registrado</div>
+        </div>
+      </div>
+
+      <!-- ── Pastas admin ── -->
+      <div class="admin-section" id="section-folders">
+        <h3>// GERENCIAR PASTAS</h3>
+        <div class="a-group">
+          <label class="a-label">NOME DA PASTA</label>
+          <input class="a-input" id="adm-folder-name" type="text" placeholder="ex: SETOR-7" maxlength="60" />
+        </div>
+        <div class="a-group">
+          <label class="a-label">PASTA PAI (opcional)</label>
+          <select class="a-select" id="adm-folder-parent">
+            <option value="">— raiz —</option>
+          </select>
+        </div>
+        <div class="a-group">
+          <label class="a-label" style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+            <input type="checkbox" id="adm-folder-hidden" style="accent-color:var(--npc);width:14px;height:14px;" />
+            <span>CRIAR JÁ OCULTA (jogadores não verão)</span>
+          </label>
+        </div>
+        <div class="a-group">
+          <label class="a-label">SENHA DE ACESSO (opcional — deixe vazio para aberta)</label>
+          <input class="a-input" id="adm-folder-password" type="text" placeholder="ex: ALFA-9" maxlength="64" autocomplete="off" />
+        </div>
+        <div class="a-row">
+          <button class="a-btn" id="adm-create-folder">+ CRIAR PASTA</button>
+        </div>
+        <div class="feedback" id="fb-folder"></div>
+        <div style="margin-top:20px; border-top:1px solid var(--border); padding-top:16px;">
+          <div class="a-label">PASTAS EXISTENTES</div>
+          <div id="adm-folder-list"></div>
+        </div>
+      </div>
+
+      <!-- ── Docs admin ── -->
+      <div class="admin-section" id="section-docs">
+        <h3>// GERENCIAR DOCUMENTOS</h3>
+        <div class="a-group">
+          <label class="a-label">PASTA</label>
+          <select class="a-select" id="adm-doc-folder"></select>
+        </div>
+        <div class="a-group">
+          <label class="a-label">TÍTULO</label>
+          <input class="a-input" id="adm-doc-title" type="text" placeholder="ex: RELATÓRIO-42" maxlength="100" />
+        </div>
+        <div class="a-group">
+          <label class="a-label">CONTEÚDO</label>
+          <textarea class="a-textarea" id="adm-doc-content" placeholder="Texto do documento..." style="min-height:140px;"></textarea>
+        </div>
+        <div class="a-group">
+          <label class="a-label">URL DE IMAGEM (opcional)</label>
+          <input class="a-input" id="adm-doc-img" type="text" placeholder="https://..." />
+        </div>
+        <div class="a-group">
+          <label class="a-label">TAMANHO DO ARQUIVO (fictício, opcional)</label>
+          <input class="a-input" id="adm-doc-size" type="text" placeholder="ex: 2.4 MB" maxlength="20" />
+        </div>
+        <div class="a-group">
+          <label class="a-label">DATA DE REGISTRO (fictícia — deixe vazio para usar a data real)</label>
+          <input class="a-input" id="adm-doc-date" type="date" min="1990-01-01" max="2010-12-31" style="color-scheme:dark;" />
+          <div style="margin-top:4px;font-size:10px;color:var(--text-dim);letter-spacing:1px;">
+            💡 Para uma história em 1998–2001, ex: <span style="color:var(--cyan-dim);">1999-03-15</span>
+          </div>
+        </div>
+        <div class="a-group">
+          <label class="a-label">SENHA DE ACESSO (opcional — deixe vazio para sem senha)</label>
+          <input class="a-input" id="adm-doc-password" type="text" placeholder="ex: ECHO-7734" maxlength="64" autocomplete="off" />
+        </div>
+        <div class="a-group" style="display:flex;align-items:center;gap:12px;">
+          <label class="a-label" style="margin:0;">ARQUIVO CORROMPIDO</label>
+          <button class="a-btn perm-btn is-off" id="adm-doc-corrupted" type="button" style="padding:4px 14px;font-size:10px;">NÃO</button>
+        </div>
+        <div class="a-row">
+          <button class="a-btn" id="adm-create-doc">+ CRIAR DOCUMENTO</button>
+          <button class="a-btn secondary" id="adm-reset-doc">LIMPAR CAMPOS</button>
+        </div>
+        <div class="feedback" id="fb-doc"></div>
+        <div style="margin-top:20px; border-top:1px solid var(--border); padding-top:16px;">
+          <div class="a-label">DOCUMENTOS EXISTENTES</div>
+          <select class="a-select" id="adm-doc-select" style="margin-bottom:10px;"></select>
+          <div class="a-row">
+            <button class="a-btn secondary" id="adm-edit-doc">✎ CARREGAR PARA EDITAR</button>
+            <button class="a-btn secondary" id="adm-delete-doc">✕ APAGAR DOC</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Relógio admin ── -->
+      <div class="admin-section" id="section-clock">
+        <h3>// RELÓGIO DO SISTEMA</h3>
+        <p style="color:var(--text-dim);font-size:11px;margin-bottom:20px;line-height:1.8;">
+          Define a data e hora exibida para os jogadores no header.<br/>
+          Se <b style="color:var(--npc)">CORRENDO</b>, avança em tempo real a partir do momento definido.<br/>
+          Se <b style="color:var(--text-dim)">PAUSADO</b>, fica fixo no horário escolhido.
+        </p>
+        <div class="a-group">
+          <label class="a-label">DATA E HORA FICTÍCIA</label>
+          <input class="a-input" id="adm-clock-input" type="datetime-local" step="1" />
+        </div>
+        <div class="a-group">
+          <label class="a-label" style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+            <input type="checkbox" id="adm-clock-running" checked style="accent-color:var(--npc);width:14px;height:14px;" />
+            <span>RELÓGIO CORRENDO (desmarcado = pausado)</span>
+          </label>
+        </div>
+        <div class="a-row">
+          <button class="a-btn" id="adm-clock-save">► APLICAR</button>
+          <button class="a-btn secondary" id="adm-clock-reset">USAR HORA REAL</button>
+        </div>
+        <div class="feedback" id="fb-clock"></div>
+        <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+          <div class="a-label">PRÉVIA</div>
+          <div id="adm-clock-preview" style="color:var(--cyan);font-size:18px;letter-spacing:3px;margin-top:8px;">--:--:--</div>
+          <div id="adm-clock-preview-date" style="color:var(--text-dim);font-size:11px;margin-top:4px;letter-spacing:1px;"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── App principal ────────────────────────────────────────── -->
+<header>
+  <div class="logo">OrionSoftware — Terminal v2</div>
+  <div class="header-right">
+    <div class="conn-indicator">
+      <div class="conn-dot" id="conn-dot"></div>
+      <span id="conn-label">CONECTANDO</span>
+    </div>
+    <span id="clock">--:--:--</span>
+  </div>
+</header>
+
+<div class="workspace">
+  <aside class="explorer">
+    <div class="panel-label">Sistema de Arquivos</div>
+    <div class="breadcrumb" id="breadcrumb">
+      <span onclick="navRoot()">~/</span>
+    </div>
+    <div class="file-list" id="file-list">
+      <div class="empty-note">aguardando autenticação...</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="viewer" id="viewer">
+      <div class="viewer-placeholder">
+        <span class="glyph">▒▒▒</span>
+        <div>selecione um arquivo</div>
+        <br/>
+        <small>navegue pelo painel à esquerda</small>
+      </div>
+    </div>
+
+    <div class="chat-panel">
+      <div class="chat-top">
+        <span>// CANAL DE COMUNICAÇÃO</span>
+        <span class="operator-tag" id="operator-tag"></span>
+      </div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-row">
+        <div class="chat-prompt">&gt;</div>
+        <input class="chat-input" id="chat-input" type="text"
+               placeholder="enviar mensagem..." maxlength="300" autocomplete="off" spellcheck="false" />
+        <button class="chat-send" id="chat-send">ENVIAR</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────
+const API = "https://orion-terminal.sinalmudo.workers.dev"; // ← troque pelo URL do worker
+
+// ── Estado global ───────────────────────────────────────────────
+let playerName = "";
+let adminToken = "";
+let isAdminMode = false;
+let folderStack = [];
+let lastMsgId = 0;
+const renderedMsgIds = new Set();
+let pollTimer = null;
+let allFolders = [];
+let chatPermissions = { can_view_chat: 1, can_write_chat: 1, can_view_repository: 1 };
+let cachedUsers = [];
+let pendingUserChanges = {}; // { ip: { can_view_chat?, can_write_chat?, can_view_repository?, name_color? } }
+let editingDocId = null;
+
+// ── Auto salvar nome do operador ───────────────────────────────
+function loadSavedName() {
+  const saved = localStorage.getItem("operatorName");
+  if (saved) {
+    document.getElementById("name-input").value = saved;
+  }
+}
+loadSavedName();
+
+// ── Checar se é modo admin via URL ──────────────────────────────
+(function checkAdmin() {
+  const params = new URLSearchParams(location.search);
+  const t = params.get("admin");
+  if (t) {
+    adminToken = t;
+    isAdminMode = true;
+  }
+})();
+
+// ── Relógio ─────────────────────────────────────────────────────
+// ── Relógio fictício ────────────────────────────────────────────
+let clockConfig = { fictionalTime: null, realTimeAtSet: null, running: true };
+
+async function loadClock() {
+  try {
+    const data = await apiFetch("/api/clock");
+    if (data && data.fictionalTime) {
+      clockConfig = data;
+    }
+  } catch (e) { /* usa hora real se falhar */ }
+}
+
+function getFictionalNow() {
+  if (!clockConfig.fictionalTime) return new Date();
+  const fictional = new Date(clockConfig.fictionalTime);
+  if (!clockConfig.running) return fictional;
+  const realAtSet = new Date(clockConfig.realTimeAtSet);
+  const elapsed = Date.now() - realAtSet.getTime();
+  return new Date(fictional.getTime() + elapsed);
+}
+
+function tick() {
+  const now = getFictionalNow();
+  document.getElementById("clock").textContent =
+    now.toLocaleTimeString("pt-BR");
+}
+tick();
+setInterval(tick, 1000);
+loadClock();
+
+// ── Login ────────────────────────────────────────────────────────
+document.getElementById("name-btn").onclick = startSession;
+document.getElementById("name-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") startSession();
+});
+
+async function startSession() {
+  const val = document.getElementById("name-input").value.trim();
+  if (!val) return;
+  playerName = val.toUpperCase().replace(/[^A-Z0-9_\-]/g, "");
+  if (!playerName) return;
+
+  localStorage.setItem("operatorName", playerName);
+  const session = await apiFetch("/api/session", "POST", { name: playerName });
+  if (!session || session.error) {
+    alert("Não foi possível abrir a sessão do operador.");
+    return;
+  }
+
+  applyChatPermissions(session.user);
+  document.getElementById("name-modal").style.display = "none";
+  document.getElementById("operator-tag").textContent = "operador: " + playerName;
+  loadFolder(null);
+  startPolling();
+  document.getElementById("conn-dot").classList.remove("offline");
+  document.getElementById("conn-label").textContent = "ONLINE";
+
+  if (isAdminMode) {
+    document.getElementById("admin-panel").classList.add("open");
+    adminInit();
+  }
+}
+
+// ── Explorador ───────────────────────────────────────────────────
+// folderPasswords: cache das senhas de pasta já autenticadas { folderId: "SENHA" }
+const folderPasswords = {};
+
+async function loadFolder(parentId, knownFolderPassword) {
+  const list = document.getElementById("file-list");
+  if (!chatPermissions.can_view_repository) {
+    renderRepositoryBlocked();
+    return;
+  }
+  list.innerHTML = '<div class="empty-note">carregando...</div>';
+
+  // Senha conhecida para esta pasta (passada via argumento ou cache)
+  if (knownFolderPassword && parentId) folderPasswords[parentId] = knownFolderPassword;
+  const fp = parentId ? (folderPasswords[parentId] || "") : "";
+  const fpParam = fp ? `&folder_password=${encodeURIComponent(fp)}` : "";
+
+  const [folders, docs] = await Promise.all([
+    apiFetch(withOperator(`/api/folders${parentId ? "?parent_id=" + parentId + fpParam : ""}`)),
+    parentId ? apiFetch(withOperator(`/api/documents?folder_id=${parentId}${fpParam}`)) : Promise.resolve([]),
+  ]);
+
+  // Pasta protegida por senha — mostra prompt no explorer
+  const blockedResp = (folders && folders.code === "FOLDER_PASSWORD_REQUIRED")
+    ? folders : (docs && docs.code === "FOLDER_PASSWORD_REQUIRED" ? docs : null);
+  if (blockedResp) {
+    renderFolderPasswordPrompt(list, blockedResp.folder_id, blockedResp.folder_name);
+    return;
+  }
+
+  if ((folders && folders.code === "REPOSITORY_BLOCKED") || (docs && docs.code === "REPOSITORY_BLOCKED")) {
+    applyChatPermissions((folders && folders.user) || (docs && docs.user));
+    return;
+  }
+
+  list.innerHTML = "";
+
+  if (folderStack.length > 0) {
+    const back = mkItem("◂  ..", "back-item", "◂");
+    back.onclick = () => {
+      folderStack.pop();
+      const parent = folderStack[folderStack.length - 1];
+      loadFolder(parent ? parent.id : null);
+      renderBreadcrumb();
+      clearViewer();
+    };
+    list.appendChild(back);
+  }
+
+  const safeFolders = Array.isArray(folders) ? folders : (folders?.roots || folders?.folders || []);
+  const safeDocs = Array.isArray(docs) ? docs : (docs?.results || []);
+  const empty = !safeFolders.length && !safeDocs.length;
+  if (empty && folderStack.length === 0) {
+    list.innerHTML = '<div class="empty-note">// nenhum arquivo disponível</div>';
+    return;
+  }
+  if (empty) {
+    list.innerHTML = '<div class="empty-note">// pasta vazia</div>';
+    return;
+  }
+
+  let itemIdx = folderStack.length > 0 ? 1 : 0;
+
+  safeFolders.forEach(f => {
+    const isLocked = !!Number(f.password_protected);
+    let cls = "folder";
+    let icon = "◈";
+    if (isLocked) { cls += " locked"; icon = "🔒"; }
+    const el = mkItem("▸ " + f.name, cls, icon);
+    el.style.animationDelay = `${itemIdx * 0.04}s`;
+    itemIdx++;
+    el.onclick = () => {
+      folderStack.push({ id: f.id, name: f.name });
+      renderBreadcrumb();
+      clearViewer();
+      loadFolder(f.id);
+    };
+    list.appendChild(el);
+  });
+
+  safeDocs.forEach(d => {
+    const isLocked = !!Number(d.password_protected);
+    const isCorrupted = !!Number(d.corrupted);
+    let cls = "doc";
+    let icon = "▷";
+    if (isLocked)    { cls += " locked";    icon = "🔒"; }
+    if (isCorrupted) { cls += " corrupted"; icon = isLocked ? "🔒" : "⚠"; }
+    const el = mkItem(d.title, cls, icon, d.file_size);
+    el.style.animationDelay = `${itemIdx * 0.04}s`;
+    itemIdx++;
+    el.onclick = () => openDoc(d.id, el, isLocked, isCorrupted);
+    list.appendChild(el);
+  });
+}
+
+function renderFolderPasswordPrompt(list, folderId, folderName, errMsg) {
+  list.innerHTML = `
+    <div style="padding:16px 14px;">
+      <div style="font-size:10px;letter-spacing:2px;color:#c8a020;margin-bottom:10px;">🔒 ${escHtml(folderName || "PASTA")} — ACESSO RESTRITO</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <input type="text" id="fp-input" placeholder="CREDENCIAL" autocomplete="off"
+          style="background:var(--bg);border:1px solid #c8a020;color:var(--text-bright);font-family:var(--font);font-size:12px;padding:6px 8px;outline:none;width:100%;letter-spacing:1px;" />
+        <button id="fp-submit" style="background:var(--bg);border:1px solid #c8a020;color:#c8a020;font-family:var(--font);font-size:10px;letter-spacing:2px;padding:5px 0;cursor:pointer;width:100%;">ACESSAR ▸</button>
+        ${errMsg ? `<div style="color:var(--danger);font-size:10px;letter-spacing:1px;">${escHtml(errMsg)}</div>` : ""}
+      </div>
+    </div>`;
+
+  const input = document.getElementById("fp-input");
+  const submit = document.getElementById("fp-submit");
+  input.focus();
+
+  const attempt = async () => {
+    const pw = input.value.trim();
+    if (!pw) return;
+    submit.disabled = true;
+    submit.textContent = "...";
+    // Tenta carregar a pasta com a senha fornecida
+    const fpParam = `&folder_password=${encodeURIComponent(pw)}`;
+    const testResp = await apiFetch(withOperator(`/api/folders?parent_id=${folderId}${fpParam}`));
+    if (testResp && testResp.code === "FOLDER_PASSWORD_REQUIRED") {
+      renderFolderPasswordPrompt(list, folderId, folderName, "ACESSO NEGADO — CREDENCIAL INVÁLIDA");
+    } else {
+      folderPasswords[folderId] = pw;
+      loadFolder(folderId, pw);
+    }
+  };
+
+  submit.onclick = attempt;
+  input.addEventListener("keydown", e => { if (e.key === "Enter") attempt(); });
+}
+
+function mkItem(label, cls, icon, sizeLabel) {
+  const el = document.createElement("div");
+  el.className = `file-item ${cls}`;
+  el.innerHTML = `<span class="icon">${icon}</span><span class="file-name">${escHtml(label)}</span>${
+    sizeLabel ? `<span class="file-size">${escHtml(sizeLabel)}</span>` : ""
+  }`;
+  return el;
+}
+
+function renderBreadcrumb() {
+  const bc = document.getElementById("breadcrumb");
+  bc.innerHTML = `<span onclick="navRoot()">~/</span>`;
+  folderStack.forEach((s, i) => {
+    bc.innerHTML += `<span class="sep">/</span>`;
+    bc.innerHTML += `<span onclick="navTo(${i})">${escHtml(s.name)}</span>`;
+  });
+}
+
+function navRoot() {
+  folderStack = [];
+  loadFolder(null);
+  renderBreadcrumb();
+  clearViewer();
+}
+
+function navTo(idx) {
+  folderStack = folderStack.slice(0, idx + 1);
+  loadFolder(folderStack[folderStack.length - 1].id);
+  renderBreadcrumb();
+  clearViewer();
+}
+
+// ── Viewer ───────────────────────────────────────────────────────
+async function openDoc(id, el, isLocked, isCorrupted) {
+  document.querySelectorAll(".file-item").forEach(i => i.classList.remove("active"));
+  el.classList.add("active");
+
+  const viewer = document.getElementById("viewer");
+
+  // Se protegido por senha, mostra prompt antes de buscar
+  if (isLocked) {
+    renderPasswordPrompt(viewer, id, el, isCorrupted);
+    return;
+  }
+
+  await fetchAndRenderDoc(viewer, id, null, isCorrupted);
+}
+
+function renderPasswordPrompt(viewer, docId, el, isCorrupted, errMsg) {
+  viewer.innerHTML = `
+    <div class="pw-prompt">
+      <span class="glyph">🔒</span>
+      <div class="pw-label">ARQUIVO PROTEGIDO — CREDENCIAL NECESSÁRIA</div>
+      <div class="pw-row">
+        <input type="text" id="pw-input" placeholder="CREDENCIAL" autocomplete="off" style="letter-spacing:2px;" />
+        <button class="a-btn" id="pw-submit">ACESSAR</button>
+      </div>
+      <div class="pw-err">${errMsg ? escHtml(errMsg) : ""}</div>
+    </div>`;
+
+  const input = document.getElementById("pw-input");
+  const submit = document.getElementById("pw-submit");
+  input.focus();
+
+  const attempt = async () => {
+    const pw = input.value.trim();
+    if (!pw) return;
+    submit.disabled = true;
+    submit.textContent = "...";
+    const result = await fetchAndRenderDoc(viewer, docId, pw, isCorrupted);
+    if (!result) {
+      // senha errada — re-renderiza prompt com erro
+      renderPasswordPrompt(viewer, docId, el, isCorrupted, "ACESSO NEGADO — CREDENCIAL INVÁLIDA");
+    }
+  };
+
+  submit.onclick = attempt;
+  input.addEventListener("keydown", e => { if (e.key === "Enter") attempt(); });
+}
+
+// Retorna true se sucesso, false se senha errada
+async function fetchAndRenderDoc(viewer, id, password, isCorrupted) {
+  viewer.innerHTML = '<div class="empty-note" style="padding:24px;">carregando...</div>';
+
+  const url = password
+    ? withOperator(`/api/documents/${id}`) + `&password=${encodeURIComponent(password)}`
+    : withOperator(`/api/documents/${id}`);
+
+  const doc = await apiFetch(url);
+
+  if (doc && doc.code === "REPOSITORY_BLOCKED") {
+    applyChatPermissions(doc.user);
+    return true;
+  }
+  if (doc && doc.code === "PASSWORD_REQUIRED") {
+    return false; // senha errada
+  }
+  // Arquivo corrompido = inacessível — tela de erro glitch
+  if (doc && doc.code === "FILE_CORRUPTED") {
+    renderCorruptedError(viewer, doc.title, doc.file_size);
+    return true;
+  }
+  if (!doc || doc.error) {
+    viewer.innerHTML = '<div class="empty-note" style="padding:24px;color:var(--danger);">// erro ao carregar documento</div>';
+    return true;
+  }
+
+  let date = "—";
+  if (doc.custom_date) {
+    // custom_date é "YYYY-MM-DD" — parse sem converter fuso
+    const [y, m, d] = doc.custom_date.split("-");
+    date = `${d}/${m}/${y}`;
+  } else if (doc.created_at) {
+    date = (parseDbDate(doc.created_at) || new Date(0)).toLocaleDateString("pt-BR");
+  }
+
+  viewer.innerHTML = `
+    <div class="viewer-scan"></div>
+    <div class="doc-enter">
+      <div class="doc-title">// ${escHtml(doc.title)}</div>
+      <div class="doc-meta">REGISTRADO EM: ${date}${doc.file_size ? ` · TAMANHO: ${escHtml(doc.file_size)}` : ""}</div>
+      <div class="doc-content">${escHtml(doc.content || "")}</div>
+      ${doc.image_url ? `<img class="doc-image" src="${escHtml(doc.image_url)}" alt="" />` : ""}
+    </div>
+  `;
+  return true;
+}
+
+function renderCorruptedError(viewer, title, fileSize) {
+  if (glitchTimer) { clearInterval(glitchTimer); glitchTimer = null; }
+  // Gera lixo visual para simular conteúdo ilegível
+  const junk = () => {
+    let s = "";
+    const len = 60 + Math.floor(Math.random() * 80);
+    for (let i = 0; i < len; i++) s += GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
+    return s;
+  };
+  const lines = Array.from({ length: 12 }, junk).join("\n");
+
+  viewer.innerHTML = `
+    <div class="doc-title" style="color:var(--danger);">// ${escHtml(title || "ARQUIVO DESCONHECIDO")}</div>
+    <div class="doc-meta">${fileSize ? `TAMANHO: ${escHtml(fileSize)} · ` : ""}STATUS: <span style="color:var(--danger);">CORROMPIDO</span></div>
+    <div class="corrupted-banner">⚠ LEITURA IMPOSSÍVEL — INTEGRIDADE DO ARQUIVO COMPROMETIDA</div>
+    <div class="corrupted-content" id="corrupted-content" style="color:var(--danger);opacity:0.7;">${escHtml(lines)}</div>
+  `;
+  // Reglitch para manter o efeito vivo
+  glitchTimer = setInterval(() => {
+    const el = document.getElementById("corrupted-content");
+    if (!el) { clearInterval(glitchTimer); glitchTimer = null; return; }
+    el.textContent = Array.from({ length: 12 }, junk).join("\n");
+  }, 150);
+}
+
+// ── Corrupted text engine ─────────────────────────────────────────
+const GLITCH_CHARS = "█▓▒░╬╫╪┼╩╦╣╠═║╗╔╝╚▄▀■□▪▫◘◙○●◦†‡§¶";
+let glitchTimer = null;
+
+function clearViewer() {
+  if (glitchTimer) { clearInterval(glitchTimer); glitchTimer = null; }
+  document.getElementById("viewer").innerHTML = `
+    <div class="viewer-placeholder">
+      <span class="glyph">▒▒▒</span>
+      <div>selecione um arquivo</div>
+    </div>`;
+  document.querySelectorAll(".file-item").forEach(i => i.classList.remove("active"));
+}
+
+// ── Chat ─────────────────────────────────────────────────────────
+document.getElementById("chat-send").onclick = sendMsg;
+document.getElementById("chat-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") sendMsg();
+});
+
+async function sendMsg() {
+  const input = document.getElementById("chat-input");
+  const text = input.value.trim();
+  if (!text || !playerName || !chatPermissions.can_write_chat) return;
+  input.value = "";
+  const result = await apiFetch("/api/chat", "POST", { sender: playerName, text });
+  if (result && result.code === "CHAT_WRITE_BLOCKED") {
+    applyChatPermissions(result.user);
+    input.placeholder = "envio bloqueado pelo controle";
+  }
+}
+
+function applyChatPermissions(user) {
+  if (!user) return;
+  const wasRepoBlocked = !chatPermissions.can_view_repository;
+  chatPermissions = {
+    can_view_chat: Number(user.can_view_chat) ? 1 : 0,
+    can_write_chat: Number(user.can_write_chat) ? 1 : 0,
+    can_view_repository: Number(user.can_view_repository ?? 1) ? 1 : 0,
+  };
+
+  const input = document.getElementById("chat-input");
+  const send = document.getElementById("chat-send");
+  const box = document.getElementById("chat-messages");
+
+  input.disabled = !chatPermissions.can_write_chat;
+  send.disabled = !chatPermissions.can_write_chat;
+  input.placeholder = chatPermissions.can_write_chat ? "enviar mensagem..." : "envio bloqueado pelo controle";
+
+  if (!chatPermissions.can_view_chat) {
+    box.innerHTML = '<div class="empty-note">// acesso ao canal bloqueado pelo controle</div>';
+  }
+
+  if (!chatPermissions.can_view_repository) {
+    renderRepositoryBlocked();
+  } else if (wasRepoBlocked && playerName) {
+    loadFolder(folderStack.length ? folderStack[folderStack.length - 1].id : null);
+  }
+}
+
+function renderRepositoryBlocked() {
+  document.getElementById("file-list").innerHTML = '<div class="empty-note">// repositório bloqueado pelo controle</div>';
+  document.getElementById("viewer").innerHTML = '<div class="empty-note" style="padding:24px;color:var(--danger);">// acesso ao repositório bloqueado</div>';
+}
+
+function withOperator(path) {
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}sender=${encodeURIComponent(playerName)}`;
+}
+
+function startPolling() {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(pollChat, 2500);
+  pollChat();
+}
+
+let isPolling = false;
+
+async function pollChat() {
+  if (!playerName) return;
+  if (isPolling) return; // evita chamadas sobrepostas que duplicavam mensagens
+  isPolling = true;
+  try {
+    const session = await apiFetch(`/api/session?name=${encodeURIComponent(playerName)}`);
+    if (session && session.user) applyChatPermissions(session.user);
+    // atualiza relógio fictício periodicamente
+    loadClock();
+    if (!chatPermissions.can_view_chat) return;
+
+    const msgs = await apiFetch(`/api/chat?since=${lastMsgId}&sender=${encodeURIComponent(playerName)}`);
+    if (msgs && msgs.code === "CHAT_VIEW_BLOCKED") {
+      applyChatPermissions(msgs.user);
+      return;
+    }
+    if (!msgs || !Array.isArray(msgs) || !msgs.length) return;
+    const box = document.getElementById("chat-messages");
+    msgs.forEach(m => {
+      lastMsgId = Math.max(lastMsgId, m.id);
+      appendMsg(box, m);
+    });
+    box.scrollTop = box.scrollHeight;
+
+    // atualiza histórico no admin se estiver aberto
+    if (isAdminMode) renderAdminHistory();
+  } finally {
+    isPolling = false;
+  }
+}
+
+function appendMsg(box, m) {
+  if (m.id !== undefined && m.id !== null) {
+    if (renderedMsgIds.has(m.id)) return; // evita duplicar mensagem já exibida
+    renderedMsgIds.add(m.id);
+  }
+  const isNpc = m.sender.startsWith("[");
+  const div = document.createElement("div");
+  div.className = `msg ${isNpc ? "npc" : "player"} msg-new`;
+  const t = fmtTime(m.created_at);
+  const displayName = escHtml(m.sender_alias || m.sender);
+  const nameColor = m.sender_color || (isNpc ? null : m.name_color) || null;
+  const nameStyle = nameColor ? ` style="color:${escHtml(nameColor)};"` : "";
+  const bodyStyle = m.text_color ? ` style="color:${escHtml(m.text_color)};"` : "";
+  div.innerHTML = `<span class="who"${nameStyle}>${displayName}</span><span class="ts">${t}</span> <span class="body"${bodyStyle}>— ${escHtml(m.text)}</span>`;
+  box.appendChild(div);
+}
+
+// ── ADMIN ────────────────────────────────────────────────────────
+document.getElementById("admin-close-btn").onclick = () => {
+  document.getElementById("admin-panel").classList.remove("open");
+};
+
+document.querySelectorAll(".admin-nav-item").forEach(btn => {
+  btn.onclick = function() {
+    document.querySelectorAll(".admin-nav-item").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".admin-section").forEach(s => s.classList.remove("active"));
+    this.classList.add("active");
+    document.getElementById("section-" + this.dataset.section).classList.add("active");
+    if (this.dataset.section === "users") renderAdminUsers();
+  };
+});
+
+async function adminInit() {
+  await adminLoadFolders();
+  await renderAdminHistory();
+  await renderAdminUsers();
+
+  // Preview de identidade em tempo real
+  const DEFAULT_NPC_NAME = "[ORION-CONTROL]";
+  const DEFAULT_NICK_COLOR = "#ff6b9d";
+  const DEFAULT_TEXT_COLOR = "#ffd0e0";
+  let admNickColor = DEFAULT_NICK_COLOR;
+  let admTextColor = DEFAULT_TEXT_COLOR;
+  let admUseNickColor = false;
+  let admUseTextColor = false;
+
+  function updateAdminPreview() {
+    const nick = document.getElementById("adm-nick").value.trim() || DEFAULT_NPC_NAME;
+    const preview = document.getElementById("adm-identity-preview");
+    const textPreview = document.getElementById("adm-text-preview");
+    preview.textContent = nick;
+    preview.style.color = admUseNickColor ? admNickColor : DEFAULT_NICK_COLOR;
+    textPreview.textContent = "— prévia do texto";
+    textPreview.style.color = admUseTextColor ? admTextColor : "";
+  }
+
+  document.getElementById("adm-nick").oninput = updateAdminPreview;
+
+  document.getElementById("adm-nick-color").oninput = (e) => {
+    admNickColor = e.target.value;
+    admUseNickColor = true;
+    updateAdminPreview();
+  };
+  document.getElementById("adm-nick-color-reset").onclick = () => {
+    admUseNickColor = false;
+    document.getElementById("adm-nick-color").value = DEFAULT_NICK_COLOR;
+    updateAdminPreview();
+  };
+
+  document.getElementById("adm-text-color").oninput = (e) => {
+    admTextColor = e.target.value;
+    admUseTextColor = true;
+    updateAdminPreview();
+  };
+  document.getElementById("adm-text-color-reset").onclick = () => {
+    admUseTextColor = false;
+    document.getElementById("adm-text-color").value = DEFAULT_TEXT_COLOR;
+    updateAdminPreview();
+  };
+
+  updateAdminPreview();
+
+  // Enviar como operador
+  document.getElementById("adm-send-npc").onclick = async () => {
+    const text = document.getElementById("adm-msg").value.trim();
+    if (!text) return;
+    const nick = document.getElementById("adm-nick").value.trim();
+    const payload = {
+      sender: "[NPC]",
+      text,
+      sender_alias: nick || null,
+      sender_color: admUseNickColor ? admNickColor : null,
+      text_color: admUseTextColor ? admTextColor : null,
+    };
+    await apiFetch("/api/chat", "POST", payload, adminToken);
+    document.getElementById("adm-msg").value = "";
+    showFb("fb-chat", "Mensagem transmitida.");
+    await renderAdminHistory();
+  };
+
+  // Limpar chat
+  document.getElementById("adm-clear-chat").onclick = async () => {
+    if (!confirm("Limpar todo o histórico?")) return;
+    await apiFetch("/api/admin/chat", "DELETE", null, adminToken);
+    document.getElementById("adm-chat-history").innerHTML = "";
+    lastMsgId = 0;
+    renderedMsgIds.clear();
+    document.getElementById("chat-messages").innerHTML = "";
+    showFb("fb-chat", "Histórico limpo.");
+  };
+
+  document.getElementById("adm-refresh-users").onclick = renderAdminUsers;
+  document.getElementById("adm-apply-users").onclick = applyPendingUserChanges;
+  document.getElementById("adm-discard-users").onclick = discardPendingUserChanges;
+
+  // Relógio admin
+  document.getElementById("adm-clock-save").onclick = async () => {
+    const val = document.getElementById("adm-clock-input").value;
+    if (!val) { showFb("fb-clock", "Defina uma data e hora.", true); return; }
+    const running = document.getElementById("adm-clock-running").checked;
+    const fictionalTime = new Date(val).toISOString();
+    await apiFetch("/api/admin/clock", "PUT", { fictionalTime, running }, adminToken);
+    clockConfig = { fictionalTime, realTimeAtSet: new Date().toISOString(), running };
+    showFb("fb-clock", running ? "Relógio atualizado e correndo." : "Relógio atualizado e pausado.");
+  };
+
+  document.getElementById("adm-clock-reset").onclick = async () => {
+    if (!confirm("Voltar ao horário real do sistema?")) return;
+    clockConfig = { fictionalTime: null, realTimeAtSet: null, running: true };
+    await apiFetch("/api/admin/clock", "PUT", { fictionalTime: new Date().toISOString(), running: true }, adminToken);
+    document.getElementById("adm-clock-input").value = "";
+    showFb("fb-clock", "Relógio voltou ao horário real.");
+  };
+
+  // Prévia do relógio na seção admin
+  setInterval(() => {
+    const preview = document.getElementById("adm-clock-preview");
+    const previewDate = document.getElementById("adm-clock-preview-date");
+    if (!preview) return;
+    const inputVal = document.getElementById("adm-clock-input").value;
+    const running = document.getElementById("adm-clock-running").checked;
+    if (inputVal) {
+      // prévia: simula como ficaria se aplicado agora
+      const base = new Date(inputVal);
+      preview.textContent = base.toLocaleTimeString("pt-BR");
+      previewDate.textContent = base.toLocaleDateString("pt-BR", { weekday:"long", year:"numeric", month:"long", day:"numeric" });
+      if (running) preview.textContent += " ▶";
+      else preview.textContent += " ‖";
+    } else {
+      const now = getFictionalNow();
+      preview.textContent = now.toLocaleTimeString("pt-BR");
+      previewDate.textContent = now.toLocaleDateString("pt-BR", { weekday:"long", year:"numeric", month:"long", day:"numeric" });
+    }
+  }, 500);
+
+  // Preencher input com valor atual ao abrir seção
+  document.querySelector('[data-section="clock"]').addEventListener("click", () => {
+    if (clockConfig.fictionalTime) {
+      const d = new Date(clockConfig.fictionalTime);
+      if (clockConfig.running) {
+        const elapsed = Date.now() - new Date(clockConfig.realTimeAtSet).getTime();
+        const current = new Date(d.getTime() + elapsed);
+        document.getElementById("adm-clock-input").value = current.toISOString().slice(0,19);
+      } else {
+        document.getElementById("adm-clock-input").value = d.toISOString().slice(0,19);
+      }
+      document.getElementById("adm-clock-running").checked = clockConfig.running;
+    }
+  });
+
+  // Criar pasta
+  document.getElementById("adm-create-folder").onclick = async () => {
+    const name = document.getElementById("adm-folder-name").value.trim();
+    const parent_id = document.getElementById("adm-folder-parent").value || null;
+    const hidden = document.getElementById("adm-folder-hidden").checked;
+    const password = document.getElementById("adm-folder-password").value.trim() || null;
+    if (!name) { showFb("fb-folder", "Nome obrigatório.", true); return; }
+    await apiFetch("/api/admin/folders", "POST", { name, parent_id: parent_id ? Number(parent_id) : null, hidden, password }, adminToken);
+    document.getElementById("adm-folder-name").value = "";
+    document.getElementById("adm-folder-hidden").checked = false;
+    document.getElementById("adm-folder-password").value = "";
+    showFb("fb-folder", "Pasta criada.");
+    await adminLoadFolders();
+    loadFolder(folderStack.length ? folderStack[folderStack.length-1].id : null);
+  };
+
+  // Toggle corrompido no form de admin
+  document.getElementById("adm-doc-corrupted").onclick = function() {
+    const isOn = this.classList.contains("is-on");
+    this.classList.toggle("is-on", !isOn);
+    this.classList.toggle("is-off", isOn);
+    this.textContent = isOn ? "NÃO" : "SIM";
+  };
+
+  // Criar ou salvar edição de documento
+  document.getElementById("adm-create-doc").onclick = async () => {
+    const folder_id  = document.getElementById("adm-doc-folder").value;
+    const title      = document.getElementById("adm-doc-title").value.trim();
+    const content    = document.getElementById("adm-doc-content").value;
+    const image_url  = document.getElementById("adm-doc-img").value.trim();
+    const file_size  = document.getElementById("adm-doc-size").value.trim();
+    const password   = document.getElementById("adm-doc-password").value.trim();
+    const custom_date = document.getElementById("adm-doc-date").value.trim();
+    const corruptBtn = document.getElementById("adm-doc-corrupted");
+    const corrupted  = corruptBtn.classList.contains("is-on");
+    if (!folder_id || !title) { showFb("fb-doc", "Pasta e título obrigatórios.", true); return; }
+
+    const payload = {
+      folder_id: Number(folder_id), title, content,
+      image_url: image_url || null, file_size: file_size || null,
+      password: password || null, corrupted,
+      custom_date: custom_date || null,
+    };
+
+    if (editingDocId) {
+      await apiFetch(`/api/admin/documents/${editingDocId}`, "PUT", payload, adminToken);
+      showFb("fb-doc", "Documento atualizado.");
+    } else {
+      await apiFetch("/api/admin/documents", "POST", payload, adminToken);
+      showFb("fb-doc", "Documento criado.");
+    }
+    adminResetDocForm();
+    await adminLoadDocs();
+    loadFolder(folderStack.length ? folderStack[folderStack.length-1].id : null);
+  };
+
+  document.getElementById("adm-reset-doc").onclick = adminResetDocForm;
+
+  // Carregar documento existente para edição
+  document.getElementById("adm-edit-doc").onclick = async () => {
+    const id = document.getElementById("adm-doc-select").value;
+    if (!id) { showFb("fb-doc", "Selecione um documento.", true); return; }
+    const doc = await apiFetch(`/api/documents/${id}`, "GET", null, adminToken);
+    if (!doc || doc.error) { showFb("fb-doc", "Erro ao carregar documento.", true); return; }
+    editingDocId = id;
+    document.getElementById("adm-doc-folder").value = doc.folder_id;
+    document.getElementById("adm-doc-title").value = doc.title || "";
+    document.getElementById("adm-doc-content").value = doc.content || "";
+    document.getElementById("adm-doc-img").value = doc.image_url || "";
+    document.getElementById("adm-doc-size").value = doc.file_size || "";
+    document.getElementById("adm-doc-password").value = doc.password || "";
+    document.getElementById("adm-doc-date").value = doc.custom_date || "";
+    const corruptBtn = document.getElementById("adm-doc-corrupted");
+    const isCorrupted = !!Number(doc.corrupted);
+    corruptBtn.classList.toggle("is-on", isCorrupted);
+    corruptBtn.classList.toggle("is-off", !isCorrupted);
+    corruptBtn.textContent = isCorrupted ? "SIM" : "NÃO";
+    const createBtn = document.getElementById("adm-create-doc");
+    createBtn.textContent = "💾 SALVAR EDIÇÃO";
+    showFb("fb-doc", "Documento carregado para edição.");
+  };
+
+  // Apagar documento
+  document.getElementById("adm-delete-doc").onclick = async () => {
+    const id = document.getElementById("adm-doc-select").value;
+    if (!id) return;
+    if (!confirm("Apagar este documento?")) return;
+    await apiFetch(`/api/admin/documents/${id}`, "DELETE", null, adminToken);
+    showFb("fb-doc", "Documento apagado.");
+    await adminLoadDocs();
+    loadFolder(folderStack.length ? folderStack[folderStack.length-1].id : null);
+  };
+
+  // ── Aba Eventos ─────────────────────────────────────────────────
+  document.querySelector('[data-section="events"]').addEventListener("click", () => {
+    renderEventsFiles();
+    renderEventsMsgs();
+  });
+
+  document.getElementById("evt-apply-btn").onclick = applyEvtVisibilityChanges;
+  document.getElementById("evt-discard-btn").onclick = () => {
+    pendingVisibilityChanges = {};
+    renderEvtFilesList();
+    showFb("fb-evt-files", "Alterações descartadas.");
+  };
+
+  const EVT_DEFAULT_NICK_COLOR = "#ff6b9d";
+  const EVT_DEFAULT_TEXT_COLOR = "#ffd0e0";
+  let evtUseNickColor = false, evtUseTextColor = false;
+
+  function evtUpdatePreview() {
+    const nick = document.getElementById("evt-nick").value.trim() || "[ORION-CONTROL]";
+    const nc = document.getElementById("evt-nick-color").value;
+    const tc = document.getElementById("evt-text-color").value;
+    document.getElementById("evt-nick-preview").textContent = nick;
+    document.getElementById("evt-nick-preview").style.color = evtUseNickColor ? nc : EVT_DEFAULT_NICK_COLOR;
+    document.getElementById("evt-text-preview").style.color = evtUseTextColor ? tc : "";
+  }
+
+  document.getElementById("evt-nick").oninput = evtUpdatePreview;
+  document.getElementById("evt-nick-color").oninput = () => { evtUseNickColor = true; evtUpdatePreview(); };
+  document.getElementById("evt-nick-color-reset").onclick = () => {
+    evtUseNickColor = false;
+    document.getElementById("evt-nick-color").value = EVT_DEFAULT_NICK_COLOR;
+    evtUpdatePreview();
+  };
+  document.getElementById("evt-text-color").oninput = () => { evtUseTextColor = true; evtUpdatePreview(); };
+  document.getElementById("evt-text-color-reset").onclick = () => {
+    evtUseTextColor = false;
+    document.getElementById("evt-text-color").value = EVT_DEFAULT_TEXT_COLOR;
+    evtUpdatePreview();
+  };
+
+  document.getElementById("evt-add-btn").onclick = () => {
+    document.getElementById("evt-edit-id").value = "";
+    document.getElementById("evt-label").value = "";
+    document.getElementById("evt-nick").value = "";
+    document.getElementById("evt-msg").value = "";
+    evtUseNickColor = false; evtUseTextColor = false;
+    document.getElementById("evt-nick-color").value = EVT_DEFAULT_NICK_COLOR;
+    document.getElementById("evt-text-color").value = EVT_DEFAULT_TEXT_COLOR;
+    document.getElementById("evt-form-title").textContent = "NOVA MENSAGEM";
+    document.getElementById("fb-events").classList.remove("visible");
+    document.getElementById("evt-form").style.display = "block";
+    evtUpdatePreview();
+  };
+
+  document.getElementById("evt-cancel-btn").onclick = () => {
+    document.getElementById("evt-form").style.display = "none";
+  };
+
+  document.getElementById("evt-save-btn").onclick = async () => {
+    const id = document.getElementById("evt-edit-id").value;
+    const label = document.getElementById("evt-label").value.trim();
+    const message = document.getElementById("evt-msg").value.trim();
+    const nick = document.getElementById("evt-nick").value.trim();
+    if (!label) { showFb("fb-events", "Rótulo obrigatório.", true); return; }
+    const payload = {
+      label,
+      message: message || null,
+      sender_alias: nick || null,
+      sender_color: evtUseNickColor ? document.getElementById("evt-nick-color").value : null,
+      text_color: evtUseTextColor ? document.getElementById("evt-text-color").value : null,
+    };
+    if (id) {
+      await apiFetch(`/api/admin/events/${id}`, "PUT", payload, adminToken);
+    } else {
+      await apiFetch("/api/admin/events", "POST", payload, adminToken);
+    }
+    document.getElementById("evt-form").style.display = "none";
+    showFb("fb-events", id ? "Atualizado." : "Mensagem salva.");
+    await renderEventsMsgs();
+  };
+}
+
+// pending visibility changes: key = "folder:id" or "doc:id", value = 0|1 (nova visibilidade hidden)
+let pendingVisibilityChanges = {};
+let cachedEvtItems = [];
+
+async function renderEventsFiles() {
+  const box = document.getElementById("evt-files-list");
+  if (!box) return;
+  box.innerHTML = '<div class="empty-note">carregando...</div>';
+
+  const rootsRaw = await apiFetch("/api/folders", "GET", null, adminToken) || [];
+  const roots = Array.isArray(rootsRaw) ? rootsRaw : (rootsRaw.folders || []);
+  const allItems = [];
+
+  for (const f of roots) {
+    allItems.push({ type: "folder", id: f.id, label: f.name, hidden: f.hidden != null ? Number(f.hidden) : 0 });
+    const childrenRaw = await apiFetch(`/api/folders?parent_id=${f.id}`, "GET", null, adminToken) || [];
+    const children = Array.isArray(childrenRaw) ? childrenRaw : (childrenRaw.folders || []);
+    for (const c of children) {
+      allItems.push({ type: "folder", id: c.id, label: `${f.name} / ${c.name}`, hidden: c.hidden != null ? Number(c.hidden) : 0 });
+      const cdocs = (await apiFetch(`/api/documents?folder_id=${c.id}`, "GET", null, adminToken)) || [];
+      (Array.isArray(cdocs) ? cdocs : (cdocs.docs || cdocs.documents || [])).forEach(d =>
+        allItems.push({ type: "doc", id: d.id, label: `${f.name} / ${c.name} / ${d.title}`, hidden: d.hidden != null ? Number(d.hidden) : 0, folder_id: c.id, title: d.title })
+      );
+    }
+    const fdocs = (await apiFetch(`/api/documents?folder_id=${f.id}`, "GET", null, adminToken)) || [];
+    (Array.isArray(fdocs) ? fdocs : (fdocs.docs || fdocs.documents || [])).forEach(d =>
+      allItems.push({ type: "doc", id: d.id, label: `${f.name} / ${d.title}`, hidden: d.hidden != null ? Number(d.hidden) : 0, folder_id: f.id, title: d.title })
+    );
+  }
+
+  cachedEvtItems = allItems;
+  renderEvtFilesList();
+}
+
+function evtEffectiveHidden(item) {
+  const key = `${item.type}:${item.id}`;
+  if (Object.prototype.hasOwnProperty.call(pendingVisibilityChanges, key)) {
+    return pendingVisibilityChanges[key];
+  }
+  return item.hidden ? 1 : 0;
+}
+
+function toggleEvtPending(item) {
+  const key = `${item.type}:${item.id}`;
+  const current = evtEffectiveHidden(item);
+  const newVal = current ? 0 : 1;
+  const original = item.hidden ? 1 : 0;
+  if (newVal === original) {
+    delete pendingVisibilityChanges[key];
+  } else {
+    pendingVisibilityChanges[key] = newVal;
+  }
+  renderEvtFilesList();
+}
+
+function renderEvtFilesList() {
+  const box = document.getElementById("evt-files-list");
+  if (!box) return;
+  box.innerHTML = "";
+  if (!cachedEvtItems.length) { box.innerHTML = '<div class="empty-note">nenhum arquivo cadastrado</div>'; }
+
+  cachedEvtItems.forEach(item => {
+    const key = `${item.type}:${item.id}`;
+    const isHidden = evtEffectiveHidden(item);
+    const isPending = Object.prototype.hasOwnProperty.call(pendingVisibilityChanges, key);
+    const typeTag = item.type === "folder" ? "📁" : "📄";
+    const div = document.createElement("div");
+    div.className = "a-list-item";
+    div.innerHTML = `
+      <span style="font-size:11px;">${typeTag} ${escHtml(item.label)}${isHidden ? ' <span style="color:var(--danger);font-size:10px;">(OCULTO)</span>' : ''}${isPending ? ' <span style="color:var(--violet);font-size:10px;">*</span>' : ''}</span>
+      <button class="a-btn perm-btn ${isPending ? "is-pending" : (isHidden ? "is-off" : "is-on")}" style="padding:4px 12px;font-size:10px;white-space:nowrap;">
+        ${isHidden ? "▶ REVELAR" : "◼ OCULTAR"}
+      </button>`;
+    div.querySelector("button").onclick = () => toggleEvtPending(item);
+    box.appendChild(div);
+  });
+
+  // atualiza botões apply/discard
+  const count = Object.keys(pendingVisibilityChanges).length;
+  const applyBtn = document.getElementById("evt-apply-btn");
+  const discardBtn = document.getElementById("evt-discard-btn");
+  const counter = document.getElementById("evt-pending-count");
+  if (applyBtn) { applyBtn.disabled = count === 0; counter.textContent = count ? ` (${count})` : ""; }
+  if (discardBtn) discardBtn.disabled = count === 0;
+}
+
+async function applyEvtVisibilityChanges() {
+  const entries = Object.entries(pendingVisibilityChanges);
+  if (!entries.length) return;
+  const applyBtn = document.getElementById("evt-apply-btn");
+  applyBtn.disabled = true;
+  applyBtn.textContent = "APLICANDO...";
+
+  const results = await Promise.all(entries.map(([key, hiddenVal]) => {
+    const [type, id] = key.split(":");
+    const item = cachedEvtItems.find(i => i.type === type && String(i.id) === String(id));
+    if (type === "folder") {
+      return apiFetch("/api/admin/folders/" + id, "PUT", { hidden: hiddenVal === 1 }, adminToken);
+    } else {
+      return apiFetch("/api/admin/documents/" + id, "PUT", {
+        folder_id: item.folder_id,
+        title: item.title,
+        hidden: hiddenVal === 1,
+      }, adminToken);
+    }
+  }));
+
+  const ok = results.filter(r => r && r.ok).length;
+  applyBtn.textContent = "✓ APLICAR VISIBILIDADE";
+  pendingVisibilityChanges = {};
+  showFb("fb-evt-files", `${ok}/${entries.length} item(ns) atualizado(s).`, ok < entries.length);
+  loadFolder(folderStack.length ? folderStack[folderStack.length - 1].id : null);
+  await renderEventsFiles();
+}
+
+async function renderEventsMsgs() {
+  const box = document.getElementById("evt-msg-list");
+  if (!box) return;
+  const events = await apiFetch("/api/admin/events", "GET", null, adminToken) || [];
+  box.innerHTML = "";
+  if (!events.length) { box.innerHTML = '<div class="empty-note">nenhuma mensagem cadastrada</div>'; return; }
+
+  events.forEach(ev => {
+    const div = document.createElement("div");
+    div.className = "a-list-item";
+    const nick = ev.sender_alias || "[ORION-CONTROL]";
+    const nickStyle = ev.sender_color ? `color:${escHtml(ev.sender_color)};font-weight:bold;` : "font-weight:bold;";
+    const textStyle = ev.text_color ? `color:${escHtml(ev.text_color)};` : "";
+    div.innerHTML = `
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:3px;">${escHtml(ev.label)}</div>
+        <div style="font-size:11px;"><span style="${nickStyle}">${escHtml(nick)}</span>${ev.message ? ` <span style="${textStyle}font-size:10px;">— ${escHtml(ev.message.slice(0, 60))}${ev.message.length > 60 ? "…" : ""}</span>` : ""}</div>
+      </div>
+      <div class="a-row" style="gap:6px;flex-shrink:0;">
+        <button class="a-btn" style="padding:4px 10px;font-size:10px;" data-fire>► DISPARAR</button>
+        <button class="a-btn secondary" style="padding:4px 10px;font-size:10px;" data-edit>EDITAR</button>
+        <button class="a-del" data-del>✕</button>
+      </div>`;
+
+    div.querySelector("[data-fire]").onclick = async (e) => {
+      if (!ev.message) return;
+      const btn = e.currentTarget;
+      btn.disabled = true; btn.textContent = "...";
+      await apiFetch("/api/chat", "POST", {
+        sender: "[NPC]",
+        text: ev.message,
+        sender_alias: ev.sender_alias || null,
+        sender_color: ev.sender_color || null,
+        text_color: ev.text_color || null,
+      }, adminToken);
+      btn.textContent = "✓ ENVIADO";
+      setTimeout(() => { btn.disabled = false; btn.textContent = "► DISPARAR"; }, 2000);
+    };
+
+    div.querySelector("[data-edit]").onclick = () => {
+      document.getElementById("evt-edit-id").value = ev.id;
+      document.getElementById("evt-label").value = ev.label;
+      document.getElementById("evt-nick").value = ev.sender_alias || "";
+      document.getElementById("evt-msg").value = ev.message || "";
+      const ncEl = document.getElementById("evt-nick-color");
+      const tcEl = document.getElementById("evt-text-color");
+      ncEl.value = ev.sender_color || "#ff6b9d";
+      tcEl.value = ev.text_color || "#ffd0e0";
+      ncEl.dispatchEvent(new Event("input"));
+      tcEl.dispatchEvent(new Event("input"));
+      document.getElementById("evt-form-title").textContent = "EDITAR MENSAGEM";
+      document.getElementById("fb-events").classList.remove("visible");
+      document.getElementById("evt-form").style.display = "block";
+    };
+
+    div.querySelector("[data-del]").onclick = async () => {
+      if (!confirm(`Apagar "${ev.label}"?`)) return;
+      await apiFetch(`/api/admin/events/${ev.id}`, "DELETE", null, adminToken);
+      renderEventsMsgs();
+    };
+
+    box.appendChild(div);
+  });
+}
+
+async function renderAdminUsers() {
+  const box = document.getElementById("adm-user-list");
+  if (!box) return;
+  const users = await apiFetch("/api/admin/users", "GET", null, adminToken) || [];
+  cachedUsers = users;
+  renderUserGroups();
+}
+
+// valor efetivo de uma permissão: considera a mudança pendente, se houver
+// (tudo chaveado por IP agora, não por nome)
+function effectivePerm(u, key) {
+  const pending = pendingUserChanges[u.ip];
+  if (pending && Object.prototype.hasOwnProperty.call(pending, key)) {
+    return pending[key] ? 1 : 0;
+  }
+  if (key === "can_view_repository") return Number(u.can_view_repository ?? 1) ? 1 : 0;
+  return Number(u[key]) ? 1 : 0;
+}
+
+function originalPerm(u, key) {
+  if (key === "can_view_repository") return Number(u.can_view_repository ?? 1) ? 1 : 0;
+  return Number(u[key]) ? 1 : 0;
+}
+
+function togglePendingPerm(ip, key) {
+  const u = cachedUsers.find(x => x.ip === ip);
+  if (!u) return;
+  const current = effectivePerm(u, key);
+  const newVal = current ? 0 : 1;
+  const original = originalPerm(u, key);
+
+  if (!pendingUserChanges[ip]) pendingUserChanges[ip] = {};
+  if (newVal === original) {
+    delete pendingUserChanges[ip][key];
+    if (Object.keys(pendingUserChanges[ip]).length === 0) delete pendingUserChanges[ip];
+  } else {
+    pendingUserChanges[ip][key] = newVal;
+  }
+  renderUserGroups();
+}
+
+function setPendingColor(ip, color) {
+  const u = cachedUsers.find(x => x.ip === ip);
+  if (!u) return;
+  const original = u.name_color || null;
+
+  if (!pendingUserChanges[ip]) pendingUserChanges[ip] = {};
+  if (color === original) {
+    delete pendingUserChanges[ip].name_color;
+    if (Object.keys(pendingUserChanges[ip]).length === 0) delete pendingUserChanges[ip];
+  } else {
+    pendingUserChanges[ip].name_color = color;
+  }
+  renderUserGroups();
+}
+
+function countPendingChanges() {
+  return Object.values(pendingUserChanges).reduce((sum, patch) => sum + Object.keys(patch).length, 0);
+}
+
+function updateApplyButtons() {
+  const count = countPendingChanges();
+  const applyBtn = document.getElementById("adm-apply-users");
+  const discardBtn = document.getElementById("adm-discard-users");
+  const counter = document.getElementById("adm-pending-count");
+  if (!applyBtn) return;
+  applyBtn.disabled = count === 0;
+  discardBtn.disabled = count === 0;
+  counter.textContent = count ? ` (${count})` : "";
+}
+
+// Agora o backend já entrega 1 linha por IP (operador). O IP é o
+// identificador real; current_name é só o apelido atual daquele IP.
+function renderUserGroups() {
+  const box = document.getElementById("adm-user-list");
+  if (!box) return;
+  box.innerHTML = "";
+
+  if (!cachedUsers.length) {
+    box.innerHTML = '<div class="empty-note">nenhum operador registrado</div>';
+    updateApplyButtons();
+    return;
+  }
+
+  const sorted = [...cachedUsers].sort((a, b) => new Date(b.last_seen || 0) - new Date(a.last_seen || 0));
+
+  sorted.forEach(u => {
+    const canView = effectivePerm(u, "can_view_chat");
+    const canWrite = effectivePerm(u, "can_write_chat");
+    const canRepo = effectivePerm(u, "can_view_repository");
+    const pending = pendingUserChanges[u.ip];
+    const isPendingView = pending && "can_view_chat" in pending;
+    const isPendingWrite = pending && "can_write_chat" in pending;
+    const isPendingRepo = pending && "can_view_repository" in pending;
+
+    const group = document.createElement("div");
+    group.className = "ip-group" + (pending ? " open" : "");
+
+    const header = document.createElement("div");
+    header.className = "ip-group-header";
+    header.innerHTML = `
+      <div>
+        <span class="ip-addr">${escHtml(u.ip)}</span>
+        <div class="ip-meta">apelido atual: <strong>${escHtml(u.current_name)}</strong> · msgs: ${u.message_count || 0} · visto: ${fmtDateTime(u.last_seen)}</div>
+      </div>
+      <span class="ip-chevron">▸</span>`;
+    header.onclick = () => group.classList.toggle("open");
+
+    const body = document.createElement("div");
+    body.className = "ip-group-body";
+
+    const div = document.createElement("div");
+    div.className = "user-card" + (pending ? " has-pending" : "");
+    const pendingColor = pending && "name_color" in pending ? pending.name_color : undefined;
+    const effectiveColor = pendingColor !== undefined ? pendingColor : (u.name_color || null);
+    const swatchColor = effectiveColor || "#58d4ff";
+    div.innerHTML = `
+      <div>
+        <div class="user-name" style="${effectiveColor ? `color:${effectiveColor};` : ""}">${escHtml(u.current_name)}</div>
+        <div class="user-color-row">
+          <input type="color" value="${swatchColor}" data-color-input title="cor do nome (fica no IP)" />
+          <button class="color-reset" data-color-reset type="button">padrão</button>
+        </div>
+      </div>
+      <div class="a-row">
+        <button class="a-btn perm-btn ${isPendingView ? "is-pending" : (canView ? "is-on" : "is-off")}" data-perm="view">${canView ? "VER CHAT" : "SEM CHAT"}</button>
+        <button class="a-btn perm-btn ${isPendingWrite ? "is-pending" : (canWrite ? "is-on" : "is-off")}" data-perm="write">${canWrite ? "FALAR" : "MUDO"}</button>
+        <button class="a-btn perm-btn ${isPendingRepo ? "is-pending" : (canRepo ? "is-on" : "is-off")}" data-perm="repo">${canRepo ? "REPO ON" : "REPO OFF"}</button>
+      </div>`;
+
+    div.querySelector('[data-perm="view"]').onclick = () => togglePendingPerm(u.ip, "can_view_chat");
+    div.querySelector('[data-perm="write"]').onclick = () => togglePendingPerm(u.ip, "can_write_chat");
+    div.querySelector('[data-perm="repo"]').onclick = () => togglePendingPerm(u.ip, "can_view_repository");
+    div.querySelector('[data-color-input]').oninput = (e) => setPendingColor(u.ip, e.target.value);
+    div.querySelector('[data-color-reset]').onclick = () => setPendingColor(u.ip, null);
+    body.appendChild(div);
+
+    group.appendChild(header);
+    group.appendChild(body);
+    box.appendChild(group);
+  });
+
+  updateApplyButtons();
+}
+
+async function applyPendingUserChanges() {
+  const entries = Object.entries(pendingUserChanges);
+  if (!entries.length) return;
+  const applyBtn = document.getElementById("adm-apply-users");
+  applyBtn.disabled = true;
+  applyBtn.textContent = "APLICANDO...";
+
+  let okCount = 0;
+  for (const [ip, patch] of entries) {
+    const result = await apiFetch(`/api/admin/users/${encodeURIComponent(ip)}`, "PUT", patch, adminToken);
+    if (result && result.ok) okCount++;
+  }
+
+  applyBtn.textContent = "✓ APLICAR ALTERAÇÕES";
+  pendingUserChanges = {};
+  if (okCount === entries.length) {
+    showFb("fb-users", `${okCount} operador(es) atualizado(s).`);
+  } else {
+    showFb("fb-users", `${okCount}/${entries.length} atualizado(s) — alguns falharam.`, true);
+  }
+  await renderAdminUsers();
+}
+
+function discardPendingUserChanges() {
+  pendingUserChanges = {};
+  renderUserGroups();
+  showFb("fb-users", "Alterações descartadas.");
+}
+
+async function adminLoadFolders() {
+  try {
+    // busca todas as pastas raiz
+    const rootsRaw = await apiFetch("/api/folders", "GET", null, adminToken) || [];
+    const roots = Array.isArray(rootsRaw) ? rootsRaw : (rootsRaw.roots || rootsRaw.folders || []);
+
+    allFolders = [...roots];
+
+    // busca pastas filhas
+    for (const f of roots) {
+      const childrenRaw = await apiFetch(`/api/folders?parent_id=${f.id}`, "GET", null, adminToken) || [];
+      const children = Array.isArray(childrenRaw) ? childrenRaw : (childrenRaw.roots || childrenRaw.folders || []);
+      children.forEach(c => { 
+        c._parentName = f.name; 
+        allFolders.push(c); 
+      });
+    }
+
+    // preenche selects
+    const parentSel = document.getElementById("adm-folder-parent");
+    const docSel    = document.getElementById("adm-doc-folder");
+    parentSel.innerHTML = '<option value="">— raiz —</option>';
+    docSel.innerHTML = '<option value="">selecione...</option>';
+
+    allFolders.forEach(f => {
+      const label = f._parentName ? `${f._parentName} / ${f.name}` : f.name;
+      parentSel.innerHTML += `<option value="${f.id}">${escHtml(label)}</option>`;
+      docSel.innerHTML    += `<option value="${f.id}">${escHtml(label)}</option>`;
+    });
+
+    // lista de pastas
+    const listEl = document.getElementById("adm-folder-list");
+    listEl.innerHTML = "";
+    if (!allFolders.length) {
+      listEl.innerHTML = '<div class="empty-note">nenhuma pasta</div>';
+    } else {
+      allFolders.forEach(f => {
+        const isHidden = Number(f.hidden) ? 1 : 0;
+        const hasPassword = !!(f.password);
+        const div = document.createElement("div");
+        div.className = "a-list-item";
+        div.style.flexDirection = "column";
+        div.style.alignItems = "stretch";
+        div.style.gap = "6px";
+        div.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+            <span>${escHtml(f._parentName ? f._parentName + " / " + f.name : f.name)}${isHidden ? ' <span style="color:var(--danger);font-size:10px;">(OCULTA)</span>' : ''}${hasPassword ? ' <span style="color:#c8a020;font-size:10px;">🔒</span>' : ''}</span>
+            <div class="a-row" style="gap:6px;flex-shrink:0;">
+              <button class="a-btn perm-btn ${isHidden ? "is-off" : "is-on"}" data-toggle="${f.id}" style="padding:4px 10px;font-size:10px;">${isHidden ? "OCULTA" : "VISÍVEL"}</button>
+              <button class="a-del" data-id="${f.id}">✕</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="text" data-pw-input="${f.id}" value="${escHtml(f.password || "")}" placeholder="senha da pasta (vazio = sem senha)" autocomplete="off"
+              style="flex:1;background:var(--bg);border:1px solid var(--border-lit);color:var(--text-bright);font-family:var(--font);font-size:11px;padding:4px 8px;outline:none;" />
+            <button class="a-btn" data-pw-save="${f.id}" style="padding:4px 10px;font-size:10px;border-color:#c8a020;color:#c8a020;">SALVAR SENHA</button>
+          </div>`;
+
+        div.querySelector("[data-toggle]").onclick = async () => {
+          await apiFetch(`/api/admin/folders/${f.id}`, "PUT", { hidden: !isHidden }, adminToken);
+          await adminLoadFolders();
+          loadFolder(folderStack.length ? folderStack[folderStack.length-1].id : null);
+        };
+        div.querySelector("[data-pw-save]").onclick = async () => {
+          const pw = div.querySelector(`[data-pw-input="${f.id}"]`).value.trim();
+          await apiFetch(`/api/admin/folders/${f.id}`, "PUT", { password: pw || null }, adminToken);
+          showFb("fb-folder", pw ? `Senha definida para "${f.name}".` : `Senha removida de "${f.name}".`);
+          await adminLoadFolders();
+        };
+        div.querySelector(".a-del").onclick = async () => {
+          if (!confirm("Apagar pasta e todos os documentos dentro?")) return;
+          await apiFetch(`/api/admin/folders/${f.id}`, "DELETE", null, adminToken);
+          await adminLoadFolders();
+          loadFolder(null); 
+          navRoot();
+        };
+        listEl.appendChild(div);
+      });
+    }
+
+    await adminLoadDocs();
+  } catch (e) {
+    console.error("Erro no adminLoadFolders:", e);
+    document.getElementById("adm-folder-list").innerHTML = 
+      `<div class="empty-note" style="color:var(--danger);">Erro ao carregar pastas: ${e.message}</div>`;
+  }
+}
+
+async function adminLoadDocs() {
+  const sel = document.getElementById("adm-doc-select");
+  sel.innerHTML = '<option value="">selecione...</option>';
+  for (const f of allFolders) {
+    const docs = await apiFetch(`/api/documents?folder_id=${f.id}`, "GET", null, adminToken) || [];
+    docs.forEach(d => {
+      const sizeTag = d.file_size ? ` (${d.file_size})` : "";
+      sel.innerHTML += `<option value="${d.id}">[${escHtml(f.name)}] ${escHtml(d.title)}${escHtml(sizeTag)}</option>`;
+    });
+  }
+}
+
+async function renderAdminHistory() {
+  const box = document.getElementById("adm-chat-history");
+  const msgs = await apiFetch("/api/chat?since=0", "GET", null, adminToken) || [];
+  box.innerHTML = "";
+  msgs.slice(-40).forEach(m => {
+    const isNpc = m.sender.startsWith("[");
+    const div = document.createElement("div");
+    div.className = `admin-chat-msg ${isNpc ? "is-npc" : "is-player"}`;
+    const displayName = escHtml(m.sender_alias || m.sender);
+    const nameColor = m.sender_color || (isNpc ? null : m.name_color) || null;
+    const nameStyle = nameColor ? ` style="color:${escHtml(nameColor)};"` : "";
+    const bodyStyle = m.text_color ? ` style="color:${escHtml(m.text_color)};"` : "";
+    div.innerHTML = `<span class="who"${nameStyle}>${displayName}</span> <span style="color:var(--text-dim);font-size:10px;">${fmtTime(m.created_at)}</span><br/><span${bodyStyle}>${escHtml(m.text)}</span>`;
+    box.appendChild(div);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+function adminResetDocForm() {
+  document.getElementById("adm-doc-title").value = "";
+  document.getElementById("adm-doc-content").value = "";
+  document.getElementById("adm-doc-img").value = "";
+  document.getElementById("adm-doc-size").value = "";
+  document.getElementById("adm-doc-password").value = "";
+  document.getElementById("adm-doc-date").value = "";
+  const corruptBtn = document.getElementById("adm-doc-corrupted");
+  if (corruptBtn) { corruptBtn.classList.remove("is-on"); corruptBtn.classList.add("is-off"); corruptBtn.textContent = "NÃO"; }
+  editingDocId = null;
+  const createBtn = document.getElementById("adm-create-doc");
+  if (createBtn) createBtn.textContent = "+ CRIAR DOCUMENTO";
+}
+
+function showFb(id, msg, isErr = false) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = "feedback visible" + (isErr ? " err" : "");
+  setTimeout(() => el.classList.remove("visible"), 3000);
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+async function apiFetch(path, method = "GET", body = null, token = null) {
+  try {
+    const opts = { method, headers: { "Content-Type": "application/json" } };
+    if (token) opts.headers["Authorization"] = `Bearer ${token}`;
+    if (body)  opts.body = JSON.stringify(body);
+    const r = await fetch(API + path, opts);
+    return r.json();
+  } catch { return null; }
+}
+
+function escHtml(str) {
+  return String(str || "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// O banco (SQLite/D1) grava CURRENT_TIMESTAMP como "YYYY-MM-DD HH:MM:SS" em UTC,
+// sem indicar o fuso. O Date() do JS, ao receber essa string sem "Z" e com espaço
+// (em vez de "T"), interpreta como horário LOCAL, não UTC — por isso o horário
+// exibido ficava errado. Esta função normaliza a string para forçar UTC.
+function parseDbDate(ts) {
+  if (!ts) return null;
+  let s = String(ts).trim();
+  if (!/Z$|[+-]\d{2}:\d{2}$/.test(s)) {
+    s = s.replace(" ", "T") + "Z";
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function fmtTime(ts) {
+  const d = parseDbDate(ts);
+  if (!d) return "--:--";
+  return d.toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" });
+}
+
+function fmtDateTime(ts) {
+  const d = parseDbDate(ts);
+  if (!d) return "--";
+  return d.toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
+}
+</script>
+</body>
+</html>

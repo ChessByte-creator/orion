@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "OrionSoftware — Terminal",
+      "hasCanvas": false,
+      "bodyTextLen": 104,
+      "bodyTextHash": "8e33f3671d76676d06e61c9c77482c98f1bf1d5f69ffe86ab720d9f4f9c57c4a",
+      "bodyTextPrefix": "ORIONSOFTWARE SYSTEMS Terminal Acesso ao sistema requer identifi",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "OrionSoftware — Terminal",
+      "hasCanvas": false,
+      "bodyTextLen": 104,
+      "bodyTextHash": "8e33f3671d76676d06e61c9c77482c98f1bf1d5f69ffe86ab720d9f4f9c57c4a",
+      "bodyTextPrefix": "ORIONSOFTWARE SYSTEMS Terminal Acesso ao sistema requer identifi",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
