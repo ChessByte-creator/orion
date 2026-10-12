@@ -38,7 +38,7 @@ export function DownloadSection({ active }: { active: boolean }) {
     <div>
       <SectionTitle>Transferência</SectionTitle>
       <p className="mb-4 text-xs leading-relaxed text-dim">
-        A porcentagem não anda sozinha. Você define o valor e os operadores veem na hora.
+        A porcentagem não anda sozinha. Você define o valor e a tela de todo mundo fica só nisso até encerrar.
         {activeJob ? " Há uma transferência em curso." : ""}
       </p>
       <Field label="Arquivo">

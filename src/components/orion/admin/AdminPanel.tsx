@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChatSection } from "@/components/orion/admin/ChatSection";
 import { ClockSection } from "@/components/orion/admin/ClockSection";
 import { DocsSection } from "@/components/orion/admin/DocsSection";
@@ -11,8 +11,12 @@ import { UsersSection } from "@/components/orion/admin/UsersSection";
 import { Btn } from "@/components/orion/admin/ui";
 import { cx } from "@/lib/orion/format";
 
-export function AdminPanel({ onClose }: { onClose: () => void }) {
-  const [section, setSection] = useState<AdminSection>("overview");
+export function AdminPanel({ onClose, focus }: { onClose: () => void; focus?: AdminSection | null }) {
+  const [section, setSection] = useState<AdminSection>(focus ?? "overview");
+
+  useEffect(() => {
+    if (focus) setSection(focus);
+  }, [focus]);
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-bg text-fg lg:inset-y-0 lg:left-auto lg:w-admin lg:border-l lg:border-line">

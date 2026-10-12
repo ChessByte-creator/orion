@@ -120,6 +120,53 @@
     animation: header-sheen 8s linear infinite;
     pointer-events: none;
   }
+  .transfer-stage {
+    background:
+      radial-gradient(
+        ellipse 48% 38% at 50% 46%,
+        color-mix(in oklab, var(--beam, var(--color-cyan)) 26%, transparent),
+        transparent 70%
+      ),
+      var(--color-bg);
+  }
+  .transfer-stage[data-tone="ok"] {
+    --beam: var(--color-ok);
+  }
+  .transfer-stage[data-tone="fail"] {
+    --beam: var(--color-danger);
+  }
+  .transfer-stage[data-tone="active"] {
+    --beam: var(--color-cyan);
+  }
+  .transfer-beam {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 12rem;
+    transform: translateX(-50%);
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      color-mix(in oklab, var(--beam, var(--color-cyan)) 18%, transparent),
+      transparent
+    );
+    animation: transfer-breathe 3.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .transfer-sweep {
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    height: 2px;
+    background: linear-gradient(to right, transparent, var(--beam, var(--color-cyan)), transparent);
+    animation: scan-down 3.6s ease-in-out infinite;
+    opacity: 0.85;
+    pointer-events: none;
+  }
+  .transfer-head {
+    animation: blink 1.1s steps(2, end) infinite;
+  }
 }
 
 @keyframes pulse-border {
@@ -177,6 +224,15 @@
     opacity: 0;
   }
 }
+@keyframes transfer-breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 @keyframes header-sheen {
   from {
     transform: translateX(-40%);
@@ -193,7 +249,10 @@
   .doc-in,
   .glitch-text,
   .viewer-scan,
-  .header-sheen::after {
+  .header-sheen::after,
+  .transfer-beam,
+  .transfer-sweep,
+  .transfer-head {
     animation: none !important;
   }
 }

@@ -5,7 +5,7 @@ import { Explorer } from "@/components/orion/Explorer";
 import { HeaderBar } from "@/components/orion/HeaderBar";
 import { LoginGate } from "@/components/orion/LoginGate";
 import { OrionProvider, useOrion } from "@/components/orion/orion-context";
-import { TransferBar } from "@/components/orion/TransferBar";
+import { TransferStage } from "@/components/orion/TransferBar";
 import { Viewer } from "@/components/orion/Viewer";
 import { apiFetch } from "@/lib/orion/api";
 import { cx } from "@/lib/orion/format";
@@ -106,7 +106,14 @@ function Shell() {
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-bg text-fg">
       <HeaderBar adminOpen={adminOpen} onToggleAdmin={() => setAdminOpen((open) => !open)} />
-      {showTransfer && download ? <TransferBar job={download} onDismiss={download.status === "active" ? undefined : () => setDismissed(download.id)} /> : null}
+      {showTransfer && download ? (
+        <TransferStage
+          job={download}
+          adminOpen={adminOpen && !!adminToken}
+          onDismiss={download.status === "active" ? undefined : () => setDismissed(download.id)}
+          onOpenControl={adminToken && !adminOpen ? () => setAdminOpen(true) : undefined}
+        />
+      ) : null}
       <div className="flex min-h-0 flex-1">
         <Explorer
           activeId={activeId}
@@ -143,7 +150,9 @@ function Shell() {
           </button>
         ))}
       </nav>
-      {adminOpen && adminToken ? <AdminPanel onClose={() => setAdminOpen(false)} /> : null}
+      {adminOpen && adminToken ? (
+        <AdminPanel onClose={() => setAdminOpen(false)} focus={download?.status === "active" ? "download" : null} />
+      ) : null}
       <div className="scanlines pointer-events-none fixed inset-0 z-50" aria-hidden="true" />
     </div>
   );
