@@ -31,6 +31,10 @@ function Shell() {
   }, [playerName, adminToken]);
 
   useEffect(() => {
+    if (download?.status === "active") setDismissed(null);
+  }, [download?.id, download?.status]);
+
+  useEffect(() => {
     setDismissed(null);
     setView(null);
     setActiveId(null);
@@ -106,14 +110,6 @@ function Shell() {
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-bg text-fg">
       <HeaderBar adminOpen={adminOpen} onToggleAdmin={() => setAdminOpen((open) => !open)} />
-      {showTransfer && download ? (
-        <TransferStage
-          job={download}
-          adminOpen={adminOpen && !!adminToken}
-          onDismiss={download.status === "active" ? undefined : () => setDismissed(download.id)}
-          onOpenControl={adminToken && !adminOpen ? () => setAdminOpen(true) : undefined}
-        />
-      ) : null}
       <div className="flex min-h-0 flex-1">
         <Explorer
           activeId={activeId}
@@ -152,6 +148,9 @@ function Shell() {
       </nav>
       {adminOpen && adminToken ? (
         <AdminPanel onClose={() => setAdminOpen(false)} focus={download?.status === "active" ? "download" : null} />
+      ) : null}
+      {showTransfer && download ? (
+        <TransferStage job={download} canControl={!!adminToken} onDismiss={download.status === "active" ? undefined : () => setDismissed(download.id)} />
       ) : null}
       <div className="scanlines pointer-events-none fixed inset-0 z-50" aria-hidden="true" />
     </div>
