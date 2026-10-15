@@ -1,7 +1,7 @@
 import { i as __toESM } from "../_runtime.mjs";
 import { K as require_react, b as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
-import { a as Terminal, c as LayoutDashboard, d as FileText, f as Download, i as TriangleAlert, l as Folder, m as ChevronLeft, n as X, o as MessageSquare, p as Clock, r as Users, s as Lock, t as Zap, u as FolderTree } from "../_libs/lucide-react.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-DvlEus5F.js
+import { a as MessageSquare, c as Folder, d as Download, f as Clock, i as Terminal, l as FolderTree, n as Users, o as Lock, p as ChevronLeft, r as TriangleAlert, s as LayoutDashboard, t as Zap, u as FileText } from "../_libs/lucide-react.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-DgizV6_-.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var ORION_API = "https://orion-terminal.sinalmudo.workers.dev";
@@ -1111,7 +1111,7 @@ function DownloadSection({ active }) {
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SectionTitle, { children: "Transferência" }),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 			className: "mb-4 text-xs leading-relaxed text-dim",
-			children: ["A porcentagem não anda sozinha. Você define o valor e os operadores veem na hora.", activeJob ? " Há uma transferência em curso." : ""]
+			children: ["A porcentagem não anda sozinha. Você define o valor e a tela de todo mundo fica só nisso até encerrar.", activeJob ? " Há uma transferência em curso." : ""]
 		}),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
 			label: "Arquivo",
@@ -2223,8 +2223,11 @@ function UsersSection({ active }) {
 		})
 	] });
 }
-function AdminPanel({ onClose }) {
-	const [section, setSection] = (0, import_react.useState)("overview");
+function AdminPanel({ onClose, focus }) {
+	const [section, setSection] = (0, import_react.useState)(focus ?? "overview");
+	(0, import_react.useEffect)(() => {
+		if (focus) setSection(focus);
+	}, [focus]);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "fixed inset-0 z-40 flex flex-col bg-bg text-fg lg:inset-y-0 lg:left-auto lg:w-admin lg:border-l lg:border-line",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -2691,7 +2694,7 @@ function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
 }
 function HeaderBar({ adminOpen, onToggleAdmin }) {
 	const { adminToken, clock, link } = useOrion();
-	const [now, setNow] = (0, import_react.useState)(() => /* @__PURE__ */ new Date());
+	const [now, setNow] = (0, import_react.useState)(null);
 	(0, import_react.useEffect)(() => {
 		setNow(fictionalNow(clock));
 		const id = window.setInterval(() => setNow(fictionalNow(clock)), 1e3);
@@ -2717,14 +2720,14 @@ function HeaderBar({ adminOpen, onToggleAdmin }) {
 					className: "text-right",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 						className: "text-sm text-bright tabular-nums",
-						children: now.toLocaleTimeString("pt-BR")
+						children: now ? now.toLocaleTimeString("pt-BR") : "--:--:--"
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "hidden text-xs text-dim sm:block",
-						children: [now.toLocaleDateString("pt-BR", {
+						children: [now ? now.toLocaleDateString("pt-BR", {
 							day: "2-digit",
 							month: "2-digit",
 							year: "numeric"
-						}), clock?.fictionalTime && !clock.running ? " · pausado" : ""]
+						}) : "", clock?.fictionalTime && !clock.running ? " · pausado" : ""]
 					})]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -2809,72 +2812,81 @@ var STATUS = {
 	ok: "Concluída",
 	fail: "Interrompida"
 };
-function TransferBar({ job, onDismiss }) {
-	const [open, setOpen] = (0, import_react.useState)(true);
+function TransferStage({ job, canControl, onDismiss }) {
+	const [controls, setControls] = (0, import_react.useState)(false);
 	const percent = Math.max(0, Math.min(100, Math.round(job.percent)));
 	const filled = Math.round(percent / 5);
-	(0, import_react.useEffect)(() => {
-		setOpen(true);
-	}, [job.id, job.status]);
-	const tone = job.status === "fail" ? "text-danger" : job.status === "ok" ? "text-ok" : "text-cyan";
-	const fill = job.status === "fail" ? "bg-danger" : job.status === "ok" ? "bg-ok" : "bg-cyan";
+	const tone = job.status === "fail" ? "fail" : job.status === "ok" ? "ok" : "active";
+	const text = tone === "fail" ? "text-danger" : tone === "ok" ? "text-ok" : "text-cyan";
+	const fill = tone === "fail" ? "bg-danger" : tone === "ok" ? "bg-ok" : "bg-cyan";
+	const meta = [job.size, job.source].filter(Boolean).join(" · ");
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-		className: "shrink-0 border-b border-line bg-panel",
-		"aria-live": "polite",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-			className: "flex items-center gap-2 px-3",
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-				type: "button",
-				onClick: () => setOpen((value) => !value),
-				className: "flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left",
+		className: "transfer-stage fixed inset-0 z-50 flex flex-col overflow-hidden",
+		"data-tone": tone,
+		"aria-live": "assertive",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "transfer-beam",
+				"aria-hidden": "true"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "transfer-sweep",
+				"aria-hidden": "true"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "relative flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-8",
 				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Download, {
-						className: cx("size-4 shrink-0", tone),
-						"aria-hidden": "true"
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: cx("text-xs tracking-widest uppercase", text),
+						children: ["Transferência · ", STATUS[job.status]]
 					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-						className: "min-w-0 flex-1 truncate text-xs tracking-widest text-dim uppercase",
-						children: ["Transferência · ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-							className: tone,
-							children: STATUS[job.status]
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: cx("file-in mt-5 text-7xl leading-none font-medium tabular-nums md:text-8xl", text),
+						children: [percent, /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "text-3xl md:text-4xl",
+							children: "%"
 						})]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-						className: cx("text-sm tabular-nums", tone),
-						children: [percent, "%"]
-					})
-				]
-			}), job.status !== "active" && onDismiss ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-				type: "button",
-				onClick: onDismiss,
-				className: "inline-flex size-11 items-center justify-center text-dim hover:text-bright",
-				"aria-label": "Dispensar transferência",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(X, { className: "size-4" })
-			}) : null]
-		}), open ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-			className: "px-3 pb-3",
-			children: [
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "flex flex-wrap items-baseline justify-between gap-2",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-						className: "text-sm text-bright",
+					}, percent),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
+						className: "mt-6 max-w-3xl text-center text-lg tracking-widest text-bright uppercase md:text-2xl",
 						children: job.title
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-						className: "text-xs text-dim",
-						children: [job.size, job.source].filter(Boolean).join(" · ")
-					})]
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-					className: "mt-3 flex gap-1",
-					"aria-hidden": "true",
-					children: Array.from({ length: 20 }, (_, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: cx("h-2 flex-1", index < filled ? fill : "bg-line") }, index))
-				}),
-				job.note ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "mt-3 text-xs text-fg",
-					children: job.note
-				}) : null
-			]
-		}) : null]
+					}),
+					meta ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "mt-3 text-center text-xs tracking-wide text-dim uppercase",
+						children: meta
+					}) : null,
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "mt-8 flex w-full max-w-xl gap-1",
+						"aria-hidden": "true",
+						children: Array.from({ length: 20 }, (_, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: cx("h-4 flex-1", index < filled ? fill : "bg-line", index === filled - 1 && job.status === "active" && "transfer-head") }, index))
+					}),
+					job.note ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "mt-6 max-w-xl text-center text-sm leading-relaxed text-fg",
+						children: job.note
+					}) : null
+				]
+			}),
+			canControl || onDismiss ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "relative z-10 shrink-0 border-t border-line bg-panel",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "flex items-center justify-center gap-2 px-3 py-2",
+					children: [canControl ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+						type: "button",
+						onClick: () => setControls((open) => !open),
+						className: "term-btn min-h-11 border border-rose-dim px-4 text-rose",
+						children: controls ? "Ocultar controle" : "Controle"
+					}) : null, onDismiss ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+						type: "button",
+						onClick: onDismiss,
+						className: "term-btn min-h-11 border border-line px-4 text-dim hover:text-bright",
+						children: "Voltar ao terminal"
+					}) : null]
+				}), canControl && controls ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "max-h-96 overflow-y-auto px-4 pb-4",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DownloadSection, { active: true })
+				}) : null]
+			}) : null
+		]
 	});
 }
 function CorruptedBody() {
@@ -3014,6 +3026,9 @@ function Shell() {
 		}
 	}, [playerName, adminToken]);
 	(0, import_react.useEffect)(() => {
+		if (download?.status === "active") setDismissed(null);
+	}, [download?.id, download?.status]);
+	(0, import_react.useEffect)(() => {
 		setDismissed(null);
 		setView(null);
 		setActiveId(null);
@@ -3089,18 +3104,34 @@ function Shell() {
 		fetchDoc(doc.id, null);
 	}
 	const showTransfer = download && download.id !== dismissed;
+	const tabs = [
+		{
+			id: "files",
+			label: "Arquivos"
+		},
+		{
+			id: "read",
+			label: "Leitura"
+		},
+		{
+			id: "chat",
+			label: "Canal"
+		}
+	];
+	if (!playerName) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "h-dvh overflow-hidden bg-bg text-fg",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(LoginGate, {}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "scanlines pointer-events-none fixed inset-0 z-50",
+			"aria-hidden": "true"
+		})]
+	});
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "flex h-dvh flex-col overflow-hidden bg-bg text-fg",
 		children: [
-			!playerName ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LoginGate, {}) : null,
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(HeaderBar, {
 				adminOpen,
 				onToggleAdmin: () => setAdminOpen((open) => !open)
 			}),
-			showTransfer && download ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TransferBar, {
-				job: download,
-				onDismiss: download.status === "active" ? void 0 : () => setDismissed(download.id)
-			}) : null,
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "flex min-h-0 flex-1",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Explorer, {
@@ -3124,27 +3155,22 @@ function Shell() {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("nav", {
 				className: "grid shrink-0 grid-cols-3 border-t border-line bg-panel md:hidden",
-				children: [
-					{
-						id: "files",
-						label: "Arquivos"
-					},
-					{
-						id: "read",
-						label: "Leitura"
-					},
-					{
-						id: "chat",
-						label: "Canal"
-					}
-				].map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				children: tabs.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 					type: "button",
 					onClick: () => setTab(item.id),
 					className: cx("term-btn min-h-11", tab === item.id ? "bg-cyan/10 text-cyan" : "text-dim"),
 					children: item.label
 				}, item.id))
 			}),
-			adminOpen && adminToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, { onClose: () => setAdminOpen(false) }) : null,
+			adminOpen && adminToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, {
+				onClose: () => setAdminOpen(false),
+				focus: download?.status === "active" ? "download" : null
+			}) : null,
+			showTransfer && download ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TransferStage, {
+				job: download,
+				canControl: !!adminToken,
+				onDismiss: download.status === "active" ? void 0 : () => setDismissed(download.id)
+			}) : null,
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "scanlines pointer-events-none fixed inset-0 z-50",
 				"aria-hidden": "true"
