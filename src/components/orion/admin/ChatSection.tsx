@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { apiFetch, readList } from "@/lib/orion/api";
 import { DEFAULT_NPC_NAME, DEFAULT_NPC_NICK, DEFAULT_NPC_TEXT } from "@/lib/orion/constants";
 import { fmtTime, safeColor } from "@/lib/orion/format";
+import { isSignal } from "@/lib/orion/signal";
 import type { ChatMessage } from "@/lib/orion/types";
 import { useOrion } from "@/components/orion/orion-context";
 import { Btn, Feedback, Field, SectionTitle, fieldClass, useFeedback } from "@/components/orion/admin/ui";
 
 export function ChatSection({ active }: { active: boolean }) {
-  const { adminToken, resetChat } = useOrion();
+  const { adminToken, resetChat, pulseType, typers, blackout, setTerminalDown } = useOrion();
   const [nick, setNick] = useState("");
   const [nickColor, setNickColor] = useState(DEFAULT_NPC_NICK);
   const [textColor, setTextColor] = useState(DEFAULT_NPC_TEXT);
@@ -43,7 +44,7 @@ export function ChatSection({ active }: { active: boolean }) {
     async function load() {
       const raw = await apiFetch<unknown>("/api/chat?since=0", "GET", undefined, adminToken);
       if (cancel) return;
-      setHistory(readList<ChatMessage>(raw).rows.slice(-40));
+      setHistory(readList<ChatMessage>(raw).rows.filter((message) => !isSignal(message.text)).slice(-40));
     }
     void load();
     const id = window.setInterval(() => void load(), 3000);
@@ -80,7 +81,16 @@ export function ChatSection({ active }: { active: boolean }) {
         <span style={previewText ? { color: previewText } : undefined}>— texto do canal</span>
       </p>
       <Field label="Mensagem">
-        <textarea className={`${fieldClass} min-h-28 py-2`} value={text} onChange={(event) => setText(event.target.value)} placeholder="Mensagem que entra no canal" />
+        <textarea
+          className={`${fieldClass} min-h-28 py-2`}
+          value={text}
+          onChange={(event) => {
+            const next = event.target.value;
+            setText(next);
+            if (next.trim()) pulseType(nick.trim());
+          }}
+          placeholder="Mensagem que entra no canal"
+        />
       </Field>
       <div className="flex flex-wrap gap-2">
         <Btn
@@ -106,11 +116,13 @@ export function ChatSection({ active }: { active: boolean }) {
         <Btn
           tone="ghost"
           onClick={async () => {
-            if (!window.confirm("Limpar todo o histórico do canal?")) return;
+            if (!window.confirm("Limpar todo o histórico do canal? O registro some junto, e o terminal religa.")) return;
+            const wasDown = blackout;
             const res = await apiFetch<{ ok?: boolean }>("/api/admin/chat", "DELETE", undefined, adminToken);
             if (res?.ok) {
               resetChat();
               setHistory([]);
+              if (wasDown) await setTerminalDown(false);
               show("Histórico limpo neste sistema. Quem já estava com o canal aberto pode precisar entrar de novo para esvaziar a tela.");
             } else show("Falhou.", true);
           }}
@@ -119,6 +131,9 @@ export function ChatSection({ active }: { active: boolean }) {
         </Btn>
       </div>
       <Feedback text={fb?.text ?? null} err={fb?.err} />
+      {typers.length ? (
+        <p className="mt-3 text-xs text-dim">{typers.map((item) => item.name).join(", ")} {typers.length > 1 ? "estão digitando" : "está digitando"}</p>
+      ) : null}
       <div className="mt-6 border-t border-line pt-4">
         <p className="mb-2 text-xs tracking-widest text-dim uppercase">Histórico recente</p>
         <div className="max-h-80 space-y-2 overflow-y-auto">

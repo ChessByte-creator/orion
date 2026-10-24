@@ -1,9 +1,23 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { apiFetch, readDownload } from "@/lib/orion/api";
 import { normalizeName } from "@/lib/orion/format";
+import { decodeSignal, encodeSignal, signalStamp, type LogAction } from "@/lib/orion/signal";
 import type { ChatMessage, ClockState, DownloadJob, Operator, SessionResponse } from "@/lib/orion/types";
 
 type LinkState = "wait" | "on" | "off";
+
+export type LogEntry = {
+  id: number;
+  at?: string;
+  name: string;
+  action: LogAction;
+  subject: string;
+};
+
+export type Typer = {
+  name: string;
+  at: number;
+};
 
 type OrionValue = {
   playerName: string;
@@ -15,6 +29,9 @@ type OrionValue = {
   messages: ChatMessage[];
   download: DownloadJob | null;
   folderTick: number;
+  blackout: boolean;
+  typers: Typer[];
+  log: LogEntry[];
   connect: (raw: string) => Promise<string | null>;
   disconnect: () => void;
   sendPlayer: (text: string) => Promise<{ ok: boolean; code?: string }>;
@@ -22,9 +39,13 @@ type OrionValue = {
   bumpFolders: () => void;
   setClock: (clock: ClockState | null) => void;
   setDownload: (job: DownloadJob | null) => void;
+  record: (action: LogAction, subject?: string) => void;
+  pulseType: (alias?: string) => void;
+  setTerminalDown: (down: boolean) => Promise<void>;
 };
 
 const OrionContext = createContext<OrionValue | null>(null);
+const CONTROL_SENDERS = new Set(["[ORION-CONTROL]", "[NPC]"]);
 
 function isOperator(value: unknown): value is Operator {
   if (!value || typeof value !== "object") return false;
@@ -42,6 +63,13 @@ function readClock(value: unknown): ClockState | null {
   };
 }
 
+function actorName(message: ChatMessage) {
+  if (CONTROL_SENDERS.has(message.sender) || message.sender.startsWith("[")) {
+    return message.sender_alias?.trim() || "controle";
+  }
+  return message.sender;
+}
+
 export function OrionProvider({ children }: { children: ReactNode }) {
   const [playerName, setPlayerName] = useState("");
   const [adminToken, setAdminToken] = useState("");
@@ -53,11 +81,66 @@ export function OrionProvider({ children }: { children: ReactNode }) {
   const [download, setDownload] = useState<DownloadJob | null>(null);
   const [folderTick, setFolderTick] = useState(0);
   const [chatEpoch, setChatEpoch] = useState(0);
+  const [blackout, setBlackout] = useState(false);
+  const [typers, setTypers] = useState<Typer[]>([]);
+  const [log, setLog] = useState<LogEntry[]>([]);
+  const nameRef = useRef("");
+  const adminRef = useRef("");
+  const typeAt = useRef(0);
+  const logAt = useRef({ key: "", at: 0 });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setAdminToken(params.get("admin")?.trim() || "");
+    const token = params.get("admin")?.trim() || "";
+    setAdminToken(token);
+    adminRef.current = token;
     setSavedName(localStorage.getItem("operatorName") || "");
+  }, []);
+
+  useEffect(() => {
+    nameRef.current = playerName;
+  }, [playerName]);
+
+  useEffect(() => {
+    adminRef.current = adminToken;
+  }, [adminToken]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      setTypers((current) => (current.some((item) => now - item.at >= 8000) ? current.filter((item) => now - item.at < 8000) : current));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const takeSignal = useCallback((message: ChatMessage) => {
+    const signal = decodeSignal(message.text);
+    if (!signal) return false;
+    if (signal.t === "down") {
+      if (CONTROL_SENDERS.has(message.sender)) setBlackout(signal.v === 1);
+      return true;
+    }
+    if (signal.t === "type") {
+      const stamped = signalStamp(message.created_at);
+      if (stamped != null && Date.now() - stamped > 8000) return true;
+      const name = actorName(message);
+      if (!name || name === nameRef.current) return true;
+      setTypers((current) => {
+        const next = current.filter((item) => item.name !== name);
+        next.push({ name, at: Date.now() });
+        return next;
+      });
+      return true;
+    }
+    setLog((current) => {
+      if (current.some((item) => item.id === message.id)) return current;
+      const next = [
+        ...current,
+        { id: message.id, at: message.created_at, name: actorName(message), action: signal.a, subject: signal.s || "" },
+      ];
+      return next.length > 400 ? next.slice(-400) : next;
+    });
+    return true;
   }, []);
 
   useEffect(() => {
@@ -87,13 +170,14 @@ export function OrionProvider({ children }: { children: ReactNode }) {
         if (isOperator(data.user)) setUser(data.user);
         if (data.clock) setClock(readClock(data.clock));
         if ("download" in data) setDownload(readDownload(data.download));
-        const incoming = Array.isArray(data.messages) ? data.messages : [];
+        const incoming = (Array.isArray(data.messages) ? data.messages : []).slice().sort((a, b) => a.id - b.id);
         const fresh: ChatMessage[] = [];
         for (const message of incoming) {
           if (typeof message.id !== "number" || seen.has(message.id)) continue;
           seen.add(message.id);
-          fresh.push(message);
           if (message.id > since) since = message.id;
+          if (takeSignal(message)) continue;
+          fresh.push(message);
         }
         if (fresh.length) {
           setMessages((prev) => {
@@ -116,7 +200,48 @@ export function OrionProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [playerName, chatEpoch]);
+  }, [playerName, chatEpoch, takeSignal]);
+
+  const record = useCallback((action: LogAction, subject?: string) => {
+    const name = nameRef.current;
+    if (!name) return;
+    const clean = subject?.trim().replace(/\s+/g, " ").slice(0, 140) || "";
+    const key = `${action}|${clean}`;
+    const now = Date.now();
+    if (logAt.current.key === key && now - logAt.current.at < 1000) return;
+    logAt.current = { key, at: now };
+    void apiFetch("/api/chat", "POST", { sender: name, text: encodeSignal({ t: "log", a: action, s: clean || undefined }) });
+  }, []);
+
+  const pulseType = useCallback((alias?: string) => {
+    const now = Date.now();
+    if (now - typeAt.current < 2500) return;
+    typeAt.current = now;
+    if (alias !== undefined && adminRef.current) {
+      void apiFetch(
+        "/api/chat",
+        "POST",
+        { sender: "[ORION-CONTROL]", text: encodeSignal({ t: "type" }), sender_alias: alias.trim() || null },
+        adminRef.current,
+      );
+      return;
+    }
+    const name = nameRef.current;
+    if (!name) return;
+    void apiFetch("/api/chat", "POST", { sender: name, text: encodeSignal({ t: "type" }) });
+  }, []);
+
+  const setTerminalDown = useCallback(async (down: boolean) => {
+    setBlackout(down);
+    if (!adminRef.current) return;
+    await apiFetch(
+      "/api/chat",
+      "POST",
+      { sender: "[ORION-CONTROL]", text: encodeSignal({ t: "down", v: down ? 1 : 0 }) },
+      adminRef.current,
+    );
+    record(down ? "caiu" : "voltou");
+  }, [record]);
 
   async function connect(raw: string) {
     const name = normalizeName(raw);
@@ -126,17 +251,28 @@ export function OrionProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("operatorName", name);
     setSavedName(name);
     setMessages([]);
+    setLog([]);
+    setTypers([]);
+    setBlackout(false);
+    nameRef.current = name;
     setPlayerName(name);
     setUser(res.user);
     setLink("on");
+    void apiFetch("/api/chat", "POST", { sender: name, text: encodeSignal({ t: "log", a: "entrou" }) });
     return null;
   }
 
   function disconnect() {
+    const name = nameRef.current;
+    if (name) void apiFetch("/api/chat", "POST", { sender: name, text: encodeSignal({ t: "log", a: "saiu" }) });
     setPlayerName("");
+    nameRef.current = "";
     setUser(null);
     setMessages([]);
     setDownload(null);
+    setLog([]);
+    setTypers([]);
+    setBlackout(false);
     setLink("wait");
     setChatEpoch((value) => value + 1);
   }
@@ -160,11 +296,15 @@ export function OrionProvider({ children }: { children: ReactNode }) {
       if (res?.user) setUser(res.user);
       return { ok: false, code: res?.code };
     }
+    record("canal", trimmed);
     return { ok: true };
   }
 
   function resetChat() {
     setMessages([]);
+    setLog([]);
+    setTypers([]);
+    setBlackout(false);
     setChatEpoch((value) => value + 1);
   }
 
@@ -178,6 +318,9 @@ export function OrionProvider({ children }: { children: ReactNode }) {
     messages,
     download,
     folderTick,
+    blackout,
+    typers,
+    log,
     connect,
     disconnect,
     sendPlayer,
@@ -185,6 +328,9 @@ export function OrionProvider({ children }: { children: ReactNode }) {
     bumpFolders: () => setFolderTick((value) => value + 1),
     setClock,
     setDownload,
+    record,
+    pulseType,
+    setTerminalDown,
   };
 
   return <OrionContext.Provider value={value}>{children}</OrionContext.Provider>;

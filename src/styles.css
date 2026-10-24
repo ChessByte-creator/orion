@@ -233,6 +233,27 @@
     opacity: 1;
   }
 }
+.dead-screen {
+  background: var(--color-bg);
+}
+.dead-snow {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  opacity: 0.4;
+  background-image:
+    repeating-linear-gradient(0deg, color-mix(in oklab, var(--color-fg) 16%, transparent) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, color-mix(in oklab, var(--color-fg) 8%, transparent) 0 1px, transparent 1px 4px);
+  animation: dead-snow 0.18s steps(2, end) infinite;
+}
+@keyframes dead-snow {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-3%, -2%);
+  }
+}
 @keyframes header-sheen {
   from {
     transform: translateX(-40%);
@@ -252,7 +273,8 @@
   .header-sheen::after,
   .transfer-beam,
   .transfer-sweep,
-  .transfer-head {
+  .transfer-head,
+  .dead-snow {
     animation: none !important;
   }
 }

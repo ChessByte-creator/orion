@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { apiFetch, readList } from "@/lib/orion/api";
 import { ago, fmtTime, seenRecently } from "@/lib/orion/format";
+import { isSignal } from "@/lib/orion/signal";
 import type { ChatMessage, EventRow, Operator } from "@/lib/orion/types";
 import { useOrion } from "@/components/orion/orion-context";
 import { Btn, Feedback, SectionTitle, useFeedback } from "@/components/orion/admin/ui";
 import type { AdminSection } from "@/components/orion/admin/sections";
 
 export function OverviewSection({ active, onJump }: { active: boolean; onJump: (section: AdminSection) => void }) {
-  const { adminToken, clock, download, folderTick } = useOrion();
+  const { adminToken, clock, download, folderTick, blackout, setTerminalDown } = useOrion();
   const [users, setUsers] = useState<Operator[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -29,7 +30,7 @@ export function OverviewSection({ active, onJump }: { active: boolean; onJump: (
       else setError(null);
       setUsers(userParsed.rows);
       setEvents(readList<EventRow>(eventRaw).rows);
-      setMessages(readList<ChatMessage>(chatRaw).rows.slice(-6));
+      setMessages(readList<ChatMessage>(chatRaw).rows.filter((message) => !isSignal(message.text)).slice(-6));
     }
     void load();
     const id = window.setInterval(() => void load(), 4000);
@@ -44,6 +45,11 @@ export function OverviewSection({ active, onJump }: { active: boolean; onJump: (
   return (
     <div>
       <SectionTitle>Visão do terminal</SectionTitle>
+      <div className="mb-4">
+        <Btn tone={blackout ? "ok" : "danger"} onClick={() => void setTerminalDown(!blackout)}>
+          {blackout ? "Religar terminal" : "Derrubar terminal"}
+        </Btn>
+      </div>
       {error ? <p className="mb-4 text-xs text-danger">{error}</p> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <article className="border border-line p-3">

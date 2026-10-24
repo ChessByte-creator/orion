@@ -5,6 +5,7 @@ import { DocsSection } from "@/components/orion/admin/DocsSection";
 import { DownloadSection } from "@/components/orion/admin/DownloadSection";
 import { EventsSection } from "@/components/orion/admin/EventsSection";
 import { FoldersSection } from "@/components/orion/admin/FoldersSection";
+import { LogSection } from "@/components/orion/admin/LogSection";
 import { OverviewSection } from "@/components/orion/admin/OverviewSection";
 import { ADMIN_NAV, type AdminSection } from "@/components/orion/admin/sections";
 import { UsersSection } from "@/components/orion/admin/UsersSection";
@@ -19,7 +20,7 @@ export function AdminPanel({ onClose, focus }: { onClose: () => void; focus?: Ad
   }, [focus]);
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-bg text-fg lg:inset-y-0 lg:left-auto lg:w-admin lg:border-l lg:border-line">
+    <div className="fixed inset-0 z-50 flex flex-col bg-bg text-fg lg:inset-y-0 lg:left-auto lg:w-admin lg:border-l lg:border-line">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-rose-dim px-3">
         <p className="text-xs tracking-widest text-rose">CONTROLE</p>
         <Btn tone="ghost" onClick={onClose}>Fechar</Btn>
@@ -48,6 +49,9 @@ export function AdminPanel({ onClose, focus }: { onClose: () => void; focus?: Ad
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className={section === "overview" ? "block" : "hidden"}>
             <OverviewSection active={section === "overview"} onJump={setSection} />
+          </div>
+          <div className={section === "log" ? "block" : "hidden"}>
+            <LogSection />
           </div>
           <div className={section === "chat" ? "block" : "hidden"}>
             <ChatSection active={section === "chat"} />

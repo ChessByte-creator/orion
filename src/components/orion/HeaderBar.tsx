@@ -9,7 +9,7 @@ export function HeaderBar({
   adminOpen: boolean;
   onToggleAdmin: () => void;
 }) {
-  const { adminToken, clock, link } = useOrion();
+  const { adminToken, clock, link, setTerminalDown } = useOrion();
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -23,7 +23,18 @@ export function HeaderBar({
 
   return (
     <header className="header-sheen flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line bg-panel px-3">
-      <div className="min-w-0 truncate text-xs tracking-widest text-cyan">ORIONSOFTWARE</div>
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="min-w-0 truncate text-xs tracking-widest text-cyan">ORIONSOFTWARE</div>
+        {adminToken ? (
+          <button
+            type="button"
+            onClick={() => void setTerminalDown(true)}
+            className="term-btn min-h-11 border border-danger px-3 text-danger"
+          >
+            Derrubar
+          </button>
+        ) : null}
+      </div>
       <div className="flex items-center gap-2 sm:gap-3">
         {adminToken ? (
           <button

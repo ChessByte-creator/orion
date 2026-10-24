@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AdminPanel } from "@/components/orion/admin/AdminPanel";
+import { BlackoutStage } from "@/components/orion/BlackoutStage";
 import { ChatPanel } from "@/components/orion/ChatPanel";
 import { Explorer } from "@/components/orion/Explorer";
 import { HeaderBar } from "@/components/orion/HeaderBar";
@@ -14,7 +15,7 @@ import type { DocFull, DocListRow, DocView } from "@/lib/orion/types";
 type Tab = "files" | "read" | "chat";
 
 function Shell() {
-  const { playerName, adminToken, user, download } = useOrion();
+  const { playerName, adminToken, user, download, blackout, record, setTerminalDown } = useOrion();
   const [adminOpen, setAdminOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("files");
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -43,7 +44,10 @@ function Shell() {
 
   useEffect(() => {
     const blocked = !!user && !Number(user.can_view_repository);
-    if (blocked && !wasBlocked.current) setView({ kind: "blocked" });
+    if (blocked && !wasBlocked.current) {
+      setView({ kind: "blocked" });
+      record("bloqueado");
+    }
     if (!blocked && wasBlocked.current && view?.kind === "blocked") setView(null);
     wasBlocked.current = blocked;
   }, [user, view?.kind]);
@@ -59,14 +63,17 @@ function Shell() {
       return;
     }
     if (raw.code === "PASSWORD_REQUIRED") {
+      if (password) record("senha-arquivo", raw.title || "ARQUIVO");
       setView({ kind: "password", id, error: password ? "credencial inválida" : undefined });
       return;
     }
     if (raw.code === "FILE_CORRUPTED") {
+      record("corrompido", raw.title || "ARQUIVO");
       setView({ kind: "corrupted", title: raw.title || "ARQUIVO", fileSize: raw.file_size });
       return;
     }
     if (raw.code === "REPOSITORY_BLOCKED") {
+      record("bloqueado");
       setView({ kind: "blocked" });
       return;
     }
@@ -74,6 +81,7 @@ function Shell() {
       setView({ kind: "error", message: raw.error || "erro ao carregar documento" });
       return;
     }
+    record("arquivo", raw.title);
     setView({ kind: "doc", doc: raw });
   }
 
@@ -81,6 +89,7 @@ function Shell() {
     setActiveId(doc.id);
     setTab("read");
     if (Number(doc.corrupted)) {
+      record("corrompido", doc.title);
       setView({ kind: "corrupted", title: doc.title, fileSize: doc.file_size });
       return;
     }
@@ -146,10 +155,16 @@ function Shell() {
           </button>
         ))}
       </nav>
+      {blackout ? (
+        <BlackoutStage
+          onRestore={adminToken ? () => void setTerminalDown(false) : undefined}
+          onOpenControl={adminToken && !adminOpen ? () => setAdminOpen(true) : undefined}
+        />
+      ) : null}
       {adminOpen && adminToken ? (
         <AdminPanel onClose={() => setAdminOpen(false)} focus={download?.status === "active" ? "download" : null} />
       ) : null}
-      {showTransfer && download ? (
+      {showTransfer && download && !blackout ? (
         <TransferStage job={download} canControl={!!adminToken} onDismiss={download.status === "active" ? undefined : () => setDismissed(download.id)} />
       ) : null}
       <div className="scanlines pointer-events-none fixed inset-0 z-50" aria-hidden="true" />

@@ -1,9 +1,10 @@
-import { Clock, Download, FileText, FolderTree, LayoutDashboard, MessageSquare, Users, Zap, type LucideIcon } from "lucide-react";
+import { Clock, Download, FileText, FolderTree, LayoutDashboard, MessageSquare, ScrollText, Users, Zap, type LucideIcon } from "lucide-react";
 
-export type AdminSection = "overview" | "chat" | "download" | "events" | "folders" | "docs" | "users" | "clock";
+export type AdminSection = "overview" | "chat" | "download" | "events" | "folders" | "docs" | "users" | "clock" | "log";
 
 export const ADMIN_NAV: Array<{ id: AdminSection; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Visão", icon: LayoutDashboard },
+  { id: "log", label: "Registro", icon: ScrollText },
   { id: "chat", label: "Canal", icon: MessageSquare },
   { id: "download", label: "Envio", icon: Download },
   { id: "events", label: "Eventos", icon: Zap },

@@ -6,7 +6,7 @@ import { Btn, Feedback, Field, SectionTitle, fieldClass, useFeedback } from "@/c
 const STEPS = [0, 25, 50, 75, 100];
 
 export function DownloadSection({ active }: { active: boolean }) {
-  const { adminToken, download, setDownload } = useOrion();
+  const { adminToken, download, setDownload, record } = useOrion();
   const [title, setTitle] = useState("");
   const [source, setSource] = useState("");
   const [size, setSize] = useState("");
@@ -29,6 +29,10 @@ export function DownloadSection({ active }: { active: boolean }) {
     const res = await apiFetch<{ ok?: boolean; error?: string; download?: unknown }>("/api/admin/download", "PUT", body, adminToken);
     if (res?.ok) {
       setDownload(readDownload(res.download));
+      if (body.action === "start") record("envio", String(body.title || "ARQUIVO"));
+      else if (body.action === "set") record("envio-pct", `${body.percent ?? percent}%`);
+      else if (body.action === "finish" && body.status === "ok") record("envio-ok", title);
+      else if (body.action === "finish") record("envio-fail", title);
       show("Atualizado.");
     } else show(res?.error || "Falhou.", true);
     return res;
@@ -109,6 +113,7 @@ export function DownloadSection({ active }: { active: boolean }) {
               const res = await apiFetch<{ ok?: boolean }>("/api/admin/download", "DELETE", undefined, adminToken);
               if (res?.ok) {
                 setDownload(null);
+                record("envio-off", title);
                 show("Retirada.");
               } else show("Falhou.", true);
             }}

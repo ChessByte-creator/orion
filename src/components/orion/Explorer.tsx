@@ -17,7 +17,7 @@ export function Explorer({
   onOpenDoc: (doc: DocListRow) => void;
   onNavigate: () => void;
 }) {
-  const { playerName, user, folderTick } = useOrion();
+  const { playerName, user, folderTick, record } = useOrion();
   const [stack, setStack] = useState<Array<{ id: number; name: string }>>([]);
   const [folders, setFolders] = useState<FolderRow[]>([]);
   const [docs, setDocs] = useState<DocListRow[]>([]);
@@ -25,6 +25,7 @@ export function Explorer({
   const [prompt, setPrompt] = useState<{ id: number; name: string; error?: string } | null>(null);
   const [filter, setFilter] = useState("");
   const passwords = useRef<Record<number, string>>({});
+  const failKey = useRef("");
 
   const repoBlocked = !!user && !Number(user.can_view_repository);
 
@@ -65,6 +66,11 @@ export function Explorer({
       if (blocked && parent) {
         const had = passwords.current[parent.id];
         if (had) delete passwords.current[parent.id];
+        const key = `${parent.id}:${had || ""}`;
+        if (had && failKey.current !== key) {
+          failKey.current = key;
+          record("senha-pasta", String(blocked.extra.folder_name || parent.name));
+        }
         setFolders([]);
         setDocs([]);
         setNote(null);
@@ -180,6 +186,8 @@ export function Explorer({
                     onNavigate();
                     setFilter("");
                     setPrompt(null);
+                    const path = [...stack.map((crumb) => crumb.name), folder.name].join(" / ");
+                    record("pasta", path);
                     setStack((current) => [...current, { id: folder.id, name: folder.name }]);
                   }}
                   className="file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-fg hover:bg-hover"

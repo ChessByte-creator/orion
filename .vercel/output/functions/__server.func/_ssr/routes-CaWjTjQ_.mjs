@@ -1,7 +1,7 @@
 import { i as __toESM } from "../_runtime.mjs";
 import { K as require_react, b as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
-import { a as MessageSquare, c as Folder, d as Download, f as Clock, i as Terminal, l as FolderTree, n as Users, o as Lock, p as ChevronLeft, r as TriangleAlert, s as LayoutDashboard, t as Zap, u as FileText } from "../_libs/lucide-react.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-DgizV6_-.js
+import { a as ScrollText, c as LayoutDashboard, d as FileText, f as Download, i as Terminal, l as Folder, m as ChevronLeft, n as Users, o as MessageSquare, p as Clock, r as TriangleAlert, s as Lock, t as Zap, u as FolderTree } from "../_libs/lucide-react.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-CaWjTjQ_.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var ORION_API = "https://orion-terminal.sinalmudo.workers.dev";
@@ -255,7 +255,61 @@ function glitchBlock() {
 	}
 	return lines.join("\n");
 }
+var LOG_ACTIONS = [
+	"entrou",
+	"saiu",
+	"pasta",
+	"senha-pasta",
+	"arquivo",
+	"senha-arquivo",
+	"corrompido",
+	"bloqueado",
+	"canal",
+	"envio",
+	"envio-pct",
+	"envio-ok",
+	"envio-fail",
+	"envio-off",
+	"caiu",
+	"voltou"
+];
+var MARK = "⁣orion:";
+function encodeSignal(signal) {
+	return MARK + JSON.stringify(signal);
+}
+function isSignal(text) {
+	return typeof text === "string" && text.startsWith(MARK);
+}
+function decodeSignal(text) {
+	if (typeof text !== "string" || !text.startsWith(MARK)) return null;
+	try {
+		const value = JSON.parse(text.slice(7));
+		if (value.t === "down") return {
+			t: "down",
+			v: value.v === 1 ? 1 : 0
+		};
+		if (value.t === "type") return { t: "type" };
+		if (value.t === "log" && LOG_ACTIONS.includes(value.a)) {
+			const subject = typeof value.s === "string" ? value.s.slice(0, 140) : void 0;
+			return {
+				t: "log",
+				a: value.a,
+				s: subject
+			};
+		}
+	} catch {
+		return null;
+	}
+	return null;
+}
+function signalStamp(created) {
+	if (!created) return Date.now();
+	const iso = created.includes("T") ? created : `${created.replace(" ", "T")}Z`;
+	const parsed = Date.parse(iso);
+	return Number.isNaN(parsed) ? null : parsed;
+}
 var OrionContext = (0, import_react.createContext)(null);
+var CONTROL_SENDERS = /* @__PURE__ */ new Set(["[ORION-CONTROL]", "[NPC]"]);
 function isOperator(value) {
 	if (!value || typeof value !== "object") return false;
 	const row = value;
@@ -270,6 +324,10 @@ function readClock(value) {
 		running: row.running !== false
 	};
 }
+function actorName(message) {
+	if (CONTROL_SENDERS.has(message.sender) || message.sender.startsWith("[")) return message.sender_alias?.trim() || "controle";
+	return message.sender;
+}
 function OrionProvider({ children }) {
 	const [playerName, setPlayerName] = (0, import_react.useState)("");
 	const [adminToken, setAdminToken] = (0, import_react.useState)("");
@@ -281,10 +339,69 @@ function OrionProvider({ children }) {
 	const [download, setDownload] = (0, import_react.useState)(null);
 	const [folderTick, setFolderTick] = (0, import_react.useState)(0);
 	const [chatEpoch, setChatEpoch] = (0, import_react.useState)(0);
+	const [blackout, setBlackout] = (0, import_react.useState)(false);
+	const [typers, setTypers] = (0, import_react.useState)([]);
+	const [log, setLog] = (0, import_react.useState)([]);
+	const nameRef = (0, import_react.useRef)("");
+	const adminRef = (0, import_react.useRef)("");
+	const typeAt = (0, import_react.useRef)(0);
+	const logAt = (0, import_react.useRef)({
+		key: "",
+		at: 0
+	});
 	(0, import_react.useEffect)(() => {
-		const params = new URLSearchParams(window.location.search);
-		setAdminToken(params.get("admin")?.trim() || "");
+		const token = new URLSearchParams(window.location.search).get("admin")?.trim() || "";
+		setAdminToken(token);
+		adminRef.current = token;
 		setSavedName(localStorage.getItem("operatorName") || "");
+	}, []);
+	(0, import_react.useEffect)(() => {
+		nameRef.current = playerName;
+	}, [playerName]);
+	(0, import_react.useEffect)(() => {
+		adminRef.current = adminToken;
+	}, [adminToken]);
+	(0, import_react.useEffect)(() => {
+		const id = window.setInterval(() => {
+			const now = Date.now();
+			setTypers((current) => current.some((item) => now - item.at >= 8e3) ? current.filter((item) => now - item.at < 8e3) : current);
+		}, 1e3);
+		return () => window.clearInterval(id);
+	}, []);
+	const takeSignal = (0, import_react.useCallback)((message) => {
+		const signal = decodeSignal(message.text);
+		if (!signal) return false;
+		if (signal.t === "down") {
+			if (CONTROL_SENDERS.has(message.sender)) setBlackout(signal.v === 1);
+			return true;
+		}
+		if (signal.t === "type") {
+			const stamped = signalStamp(message.created_at);
+			if (stamped != null && Date.now() - stamped > 8e3) return true;
+			const name = actorName(message);
+			if (!name || name === nameRef.current) return true;
+			setTypers((current) => {
+				const next = current.filter((item) => item.name !== name);
+				next.push({
+					name,
+					at: Date.now()
+				});
+				return next;
+			});
+			return true;
+		}
+		setLog((current) => {
+			if (current.some((item) => item.id === message.id)) return current;
+			const next = [...current, {
+				id: message.id,
+				at: message.created_at,
+				name: actorName(message),
+				action: signal.a,
+				subject: signal.s || ""
+			}];
+			return next.length > 400 ? next.slice(-400) : next;
+		});
+		return true;
 	}, []);
 	(0, import_react.useEffect)(() => {
 		if (!playerName) return;
@@ -306,13 +423,14 @@ function OrionProvider({ children }) {
 				if (isOperator(data.user)) setUser(data.user);
 				if (data.clock) setClock(readClock(data.clock));
 				if ("download" in data) setDownload(readDownload(data.download));
-				const incoming = Array.isArray(data.messages) ? data.messages : [];
+				const incoming = (Array.isArray(data.messages) ? data.messages : []).slice().sort((a, b) => a.id - b.id);
 				const fresh = [];
 				for (const message of incoming) {
 					if (typeof message.id !== "number" || seen.has(message.id)) continue;
 					seen.add(message.id);
-					fresh.push(message);
 					if (message.id > since) since = message.id;
+					if (takeSignal(message)) continue;
+					fresh.push(message);
 				}
 				if (fresh.length) setMessages((prev) => {
 					const real = [...prev.filter((item) => item.id > 0), ...fresh];
@@ -330,7 +448,62 @@ function OrionProvider({ children }) {
 			cancelled = true;
 			window.clearInterval(id);
 		};
-	}, [playerName, chatEpoch]);
+	}, [
+		playerName,
+		chatEpoch,
+		takeSignal
+	]);
+	const record = (0, import_react.useCallback)((action, subject) => {
+		const name = nameRef.current;
+		if (!name) return;
+		const clean = subject?.trim().replace(/\s+/g, " ").slice(0, 140) || "";
+		const key = `${action}|${clean}`;
+		const now = Date.now();
+		if (logAt.current.key === key && now - logAt.current.at < 1e3) return;
+		logAt.current = {
+			key,
+			at: now
+		};
+		apiFetch("/api/chat", "POST", {
+			sender: name,
+			text: encodeSignal({
+				t: "log",
+				a: action,
+				s: clean || void 0
+			})
+		});
+	}, []);
+	const pulseType = (0, import_react.useCallback)((alias) => {
+		const now = Date.now();
+		if (now - typeAt.current < 2500) return;
+		typeAt.current = now;
+		if (alias !== void 0 && adminRef.current) {
+			apiFetch("/api/chat", "POST", {
+				sender: "[ORION-CONTROL]",
+				text: encodeSignal({ t: "type" }),
+				sender_alias: alias.trim() || null
+			}, adminRef.current);
+			return;
+		}
+		const name = nameRef.current;
+		if (!name) return;
+		apiFetch("/api/chat", "POST", {
+			sender: name,
+			text: encodeSignal({ t: "type" })
+		});
+	}, []);
+	const setTerminalDown = (0, import_react.useCallback)(async (down) => {
+		setBlackout(down);
+		if (!adminRef.current) return;
+		await apiFetch("/api/chat", "POST", {
+			sender: "[ORION-CONTROL]",
+			text: encodeSignal({
+				t: "down",
+				v: down ? 1 : 0
+			})
+		}, adminRef.current);
+		record(down ? "caiu" : "voltou");
+	}, [record]);
 	async function connect(raw) {
 		const name = normalizeName(raw);
 		if (!name) return "Identificador inválido. Use letras, números, _ ou -.";
@@ -339,16 +512,39 @@ function OrionProvider({ children }) {
 		localStorage.setItem("operatorName", name);
 		setSavedName(name);
 		setMessages([]);
+		setLog([]);
+		setTypers([]);
+		setBlackout(false);
+		nameRef.current = name;
 		setPlayerName(name);
 		setUser(res.user);
 		setLink("on");
+		apiFetch("/api/chat", "POST", {
+			sender: name,
+			text: encodeSignal({
+				t: "log",
+				a: "entrou"
+			})
+		});
 		return null;
 	}
 	function disconnect() {
+		const name = nameRef.current;
+		if (name) apiFetch("/api/chat", "POST", {
+			sender: name,
+			text: encodeSignal({
+				t: "log",
+				a: "saiu"
+			})
+		});
 		setPlayerName("");
+		nameRef.current = "";
 		setUser(null);
 		setMessages([]);
 		setDownload(null);
+		setLog([]);
+		setTypers([]);
+		setBlackout(false);
 		setLink("wait");
 		setChatEpoch((value) => value + 1);
 	}
@@ -380,10 +576,14 @@ function OrionProvider({ children }) {
 				code: res?.code
 			};
 		}
+		record("canal", trimmed);
 		return { ok: true };
 	}
 	function resetChat() {
 		setMessages([]);
+		setLog([]);
+		setTypers([]);
+		setBlackout(false);
 		setChatEpoch((value) => value + 1);
 	}
 	const value = {
@@ -396,13 +596,19 @@ function OrionProvider({ children }) {
 		messages,
 		download,
 		folderTick,
+		blackout,
+		typers,
+		log,
 		connect,
 		disconnect,
 		sendPlayer,
 		resetChat,
 		bumpFolders: () => setFolderTick((value) => value + 1),
 		setClock,
-		setDownload
+		setDownload,
+		record,
+		pulseType,
+		setTerminalDown
 	};
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrionContext.Provider, {
 		value,
@@ -475,7 +681,7 @@ function useFeedback() {
 	};
 }
 function ChatSection({ active }) {
-	const { adminToken, resetChat } = useOrion();
+	const { adminToken, resetChat, pulseType, typers, blackout, setTerminalDown } = useOrion();
 	const [nick, setNick] = (0, import_react.useState)("");
 	const [nickColor, setNickColor] = (0, import_react.useState)(DEFAULT_NPC_NICK);
 	const [textColor, setTextColor] = (0, import_react.useState)(DEFAULT_NPC_TEXT);
@@ -515,7 +721,7 @@ function ChatSection({ active }) {
 		async function load() {
 			const raw = await apiFetch("/api/chat?since=0", "GET", void 0, adminToken);
 			if (cancel) return;
-			setHistory(readList(raw).rows.slice(-40));
+			setHistory(readList(raw).rows.filter((message) => !isSignal(message.text)).slice(-40));
 		}
 		load();
 		const id = window.setInterval(() => void load(), 3e3);
@@ -612,7 +818,11 @@ function ChatSection({ active }) {
 			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
 				className: `${fieldClass} min-h-28 py-2`,
 				value: text,
-				onChange: (event) => setText(event.target.value),
+				onChange: (event) => {
+					const next = event.target.value;
+					setText(next);
+					if (next.trim()) pulseType(nick.trim());
+				},
 				placeholder: "Mensagem que entra no canal"
 			})
 		}),
@@ -639,10 +849,12 @@ function ChatSection({ active }) {
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, {
 				tone: "ghost",
 				onClick: async () => {
-					if (!window.confirm("Limpar todo o histórico do canal?")) return;
+					if (!window.confirm("Limpar todo o histórico do canal? O registro some junto, e o terminal religa.")) return;
+					const wasDown = blackout;
 					if ((await apiFetch("/api/admin/chat", "DELETE", void 0, adminToken))?.ok) {
 						resetChat();
 						setHistory([]);
+						if (wasDown) await setTerminalDown(false);
 						show("Histórico limpo neste sistema. Quem já estava com o canal aberto pode precisar entrar de novo para esvaziar a tela.");
 					} else show("Falhou.", true);
 				},
@@ -653,6 +865,14 @@ function ChatSection({ active }) {
 			text: fb?.text ?? null,
 			err: fb?.err
 		}),
+		typers.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+			className: "mt-3 text-xs text-dim",
+			children: [
+				typers.map((item) => item.name).join(", "),
+				" ",
+				typers.length > 1 ? "estão digitando" : "está digitando"
+			]
+		}) : null,
 		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "mt-6 border-t border-line pt-4",
 			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
@@ -1083,7 +1303,7 @@ var STEPS = [
 	100
 ];
 function DownloadSection({ active }) {
-	const { adminToken, download, setDownload } = useOrion();
+	const { adminToken, download, setDownload, record } = useOrion();
 	const [title, setTitle] = (0, import_react.useState)("");
 	const [source, setSource] = (0, import_react.useState)("");
 	const [size, setSize] = (0, import_react.useState)("");
@@ -1103,6 +1323,10 @@ function DownloadSection({ active }) {
 		const res = await apiFetch("/api/admin/download", "PUT", body, adminToken);
 		if (res?.ok) {
 			setDownload(readDownload(res.download));
+			if (body.action === "start") record("envio", String(body.title || "ARQUIVO"));
+			else if (body.action === "set") record("envio-pct", `${body.percent ?? percent}%`);
+			else if (body.action === "finish" && body.status === "ok") record("envio-ok", title);
+			else if (body.action === "finish") record("envio-fail", title);
 			show("Atualizado.");
 		} else show(res?.error || "Falhou.", true);
 		return res;
@@ -1248,6 +1472,7 @@ function DownloadSection({ active }) {
 								if (!window.confirm("Retirar a transferência da tela de todo mundo?")) return;
 								if ((await apiFetch("/api/admin/download", "DELETE", void 0, adminToken))?.ok) {
 									setDownload(null);
+									record("envio-off", title);
 									show("Retirada.");
 								} else show("Falhou.", true);
 							},
@@ -1778,8 +2003,115 @@ function FoldersSection({ active }) {
 		})
 	] });
 }
+var LABEL = {
+	entrou: "entrou no terminal",
+	saiu: "saiu do terminal",
+	pasta: "abriu a pasta",
+	"senha-pasta": "errou a credencial da pasta",
+	arquivo: "abriu o arquivo",
+	"senha-arquivo": "errou a credencial do arquivo",
+	corrompido: "abriu arquivo corrompido",
+	bloqueado: "bateu no repositório bloqueado",
+	canal: "escreveu no canal",
+	envio: "iniciou a transferência",
+	"envio-pct": "ajustou a transferência",
+	"envio-ok": "concluiu a transferência",
+	"envio-fail": "interrompeu a transferência",
+	"envio-off": "retirou a transferência",
+	caiu: "derrubou o terminal",
+	voltou: "religou o terminal"
+};
+var FILES = /* @__PURE__ */ new Set([
+	"pasta",
+	"senha-pasta",
+	"arquivo",
+	"senha-arquivo",
+	"corrompido",
+	"bloqueado"
+]);
+var CHANNEL = /* @__PURE__ */ new Set(["canal"]);
+var MACHINE = /* @__PURE__ */ new Set([
+	"entrou",
+	"saiu",
+	"envio",
+	"envio-pct",
+	"envio-ok",
+	"envio-fail",
+	"envio-off",
+	"caiu",
+	"voltou"
+]);
+var FILTERS = [
+	{
+		id: "all",
+		label: "Tudo"
+	},
+	{
+		id: "files",
+		label: "Arquivos"
+	},
+	{
+		id: "channel",
+		label: "Canal"
+	},
+	{
+		id: "machine",
+		label: "Terminal"
+	}
+];
+function LogSection() {
+	const { log } = useOrion();
+	const [filter, setFilter] = (0, import_react.useState)("all");
+	const rows = [...log].reverse().filter((entry) => {
+		if (filter === "files") return FILES.has(entry.action);
+		if (filter === "channel") return CHANNEL.has(entry.action);
+		if (filter === "machine") return MACHINE.has(entry.action);
+		return true;
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SectionTitle, { children: "Registro" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "mb-4 text-xs leading-relaxed text-dim",
+			children: "Quem entrou, o que abriu, senha errada, o que escreveu e o que o controle fez. Limpar o canal apaga isto."
+		}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "mb-4 flex flex-wrap gap-2",
+			children: FILTERS.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, {
+				tone: filter === item.id ? "rose" : "ghost",
+				onClick: () => setFilter(item.id),
+				children: item.label
+			}, item.id))
+		}),
+		rows.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "text-xs text-dim",
+			children: "nada registrado"
+		}) : null,
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "space-y-2",
+			children: rows.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+				className: "border border-line px-3 py-2",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+					className: "text-xs text-dim",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						className: "text-fg",
+						children: entry.name
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						className: "ml-2",
+						children: fmtTime(entry.at)
+					})]
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+					className: cx("mt-1 text-sm text-bright", entry.action === "caiu" && "text-danger"),
+					children: [LABEL[entry.action], entry.subject ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+						className: "text-dim",
+						children: [" — ", entry.subject]
+					}) : null]
+				})]
+			}, entry.id))
+		})
+	] });
+}
 function OverviewSection({ active, onJump }) {
-	const { adminToken, clock, download, folderTick } = useOrion();
+	const { adminToken, clock, download, folderTick, blackout, setTerminalDown } = useOrion();
 	const [users, setUsers] = (0, import_react.useState)([]);
 	const [events, setEvents] = (0, import_react.useState)([]);
 	const [messages, setMessages] = (0, import_react.useState)([]);
@@ -1800,7 +2132,7 @@ function OverviewSection({ active, onJump }) {
 			else setError(null);
 			setUsers(userParsed.rows);
 			setEvents(readList(eventRaw).rows);
-			setMessages(readList(chatRaw).rows.slice(-6));
+			setMessages(readList(chatRaw).rows.filter((message) => !isSignal(message.text)).slice(-6));
 		}
 		load();
 		const id = window.setInterval(() => void load(), 4e3);
@@ -1816,6 +2148,14 @@ function OverviewSection({ active, onJump }) {
 	const recent = users.filter((item) => seenRecently(item.last_seen)).length;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SectionTitle, { children: "Visão do terminal" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "mb-4",
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, {
+				tone: blackout ? "ok" : "danger",
+				onClick: () => void setTerminalDown(!blackout),
+				children: blackout ? "Religar terminal" : "Derrubar terminal"
+			})
+		}),
 		error ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "mb-4 text-xs text-danger",
 			children: error
@@ -1990,6 +2330,11 @@ var ADMIN_NAV = [
 		id: "overview",
 		label: "Visão",
 		icon: LayoutDashboard
+	},
+	{
+		id: "log",
+		label: "Registro",
+		icon: ScrollText
 	},
 	{
 		id: "chat",
@@ -2229,7 +2574,7 @@ function AdminPanel({ onClose, focus }) {
 		if (focus) setSection(focus);
 	}, [focus]);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "fixed inset-0 z-40 flex flex-col bg-bg text-fg lg:inset-y-0 lg:left-auto lg:w-admin lg:border-l lg:border-line",
+		className: "fixed inset-0 z-50 flex flex-col bg-bg text-fg lg:inset-y-0 lg:left-auto lg:w-admin lg:border-l lg:border-line",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "flex h-14 shrink-0 items-center justify-between border-b border-rose-dim px-3",
 			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
@@ -2268,6 +2613,10 @@ function AdminPanel({ onClose, focus }) {
 						})
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: section === "log" ? "block" : "hidden",
+						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LogSection, {})
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 						className: section === "chat" ? "block" : "hidden",
 						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChatSection, { active: section === "chat" })
 					}),
@@ -2300,14 +2649,45 @@ function AdminPanel({ onClose, focus }) {
 		})]
 	});
 }
+function BlackoutStage({ onRestore, onOpenControl }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		className: "dead-screen fixed inset-0 z-50 flex flex-col items-center justify-center",
+		"aria-live": "assertive",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "dead-snow",
+				"aria-hidden": "true"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "relative text-xs tracking-widest text-dim",
+				children: "SEM SINAL"
+			}),
+			onRestore || onOpenControl ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "relative mt-8 flex flex-wrap justify-center gap-2",
+				children: [onRestore ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					onClick: onRestore,
+					className: "term-btn min-h-11 border border-rose-dim px-4 text-rose",
+					children: "Religar"
+				}) : null, onOpenControl ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					onClick: onOpenControl,
+					className: "term-btn min-h-11 border border-line px-4 text-dim hover:text-bright",
+					children: "Controle"
+				}) : null]
+			}) : null
+		]
+	});
+}
 function ChatPanel({ visible }) {
-	const { messages, user, playerName, sendPlayer, disconnect } = useOrion();
+	const { messages, user, playerName, sendPlayer, disconnect, typers, pulseType } = useOrion();
 	const [text, setText] = (0, import_react.useState)("");
 	const [stuck, setStuck] = (0, import_react.useState)(true);
 	const [pending, setPending] = (0, import_react.useState)(false);
 	const boxRef = (0, import_react.useRef)(null);
 	const canView = !user || !!Number(user.can_view_chat);
 	const canWrite = !user || !!Number(user.can_write_chat);
+	const typing = typers.filter((item) => item.name.toUpperCase() !== playerName.toUpperCase());
 	(0, import_react.useEffect)(() => {
 		const box = boxRef.current;
 		if (!box || !stuck) return;
@@ -2404,6 +2784,14 @@ function ChatPanel({ visible }) {
 				className: "mx-3 mb-2 min-h-11 border border-line text-xs text-cyan",
 				children: "novas mensagens"
 			}) : null,
+			typing.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "border-t border-line px-3 py-2 text-xs text-dim",
+				children: [
+					typing.map((item) => item.name).join(", "),
+					" ",
+					typing.length > 1 ? "estão digitando" : "está digitando"
+				]
+			}) : null,
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
 				onSubmit,
 				className: "flex border-t border-line",
@@ -2415,7 +2803,11 @@ function ChatPanel({ visible }) {
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 						value: text,
-						onChange: (event) => setText(event.target.value),
+						onChange: (event) => {
+							const next = event.target.value;
+							setText(next);
+							if (next.trim()) pulseType();
+						},
 						disabled: !canWrite,
 						maxLength: 300,
 						autoComplete: "off",
@@ -2494,7 +2886,7 @@ function CredentialForm({ title, error, onSubmit, onBack }) {
 	});
 }
 function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
-	const { playerName, user, folderTick } = useOrion();
+	const { playerName, user, folderTick, record } = useOrion();
 	const [stack, setStack] = (0, import_react.useState)([]);
 	const [folders, setFolders] = (0, import_react.useState)([]);
 	const [docs, setDocs] = (0, import_react.useState)([]);
@@ -2502,6 +2894,7 @@ function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
 	const [prompt, setPrompt] = (0, import_react.useState)(null);
 	const [filter, setFilter] = (0, import_react.useState)("");
 	const passwords = (0, import_react.useRef)({});
+	const failKey = (0, import_react.useRef)("");
 	const repoBlocked = !!user && !Number(user.can_view_repository);
 	(0, import_react.useEffect)(() => {
 		let cancel = false;
@@ -2529,6 +2922,11 @@ function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
 			if (blocked && parent) {
 				const had = passwords.current[parent.id];
 				if (had) delete passwords.current[parent.id];
+				const key = `${parent.id}:${had || ""}`;
+				if (had && failKey.current !== key) {
+					failKey.current = key;
+					record("senha-pasta", String(blocked.extra.folder_name || parent.name));
+				}
 				setFolders([]);
 				setDocs([]);
 				setNote(null);
@@ -2646,6 +3044,8 @@ function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
 								onNavigate();
 								setFilter("");
 								setPrompt(null);
+								const path = [...stack.map((crumb) => crumb.name), folder.name].join(" / ");
+								record("pasta", path);
 								setStack((current) => [...current, {
 									id: folder.id,
 									name: folder.name
@@ -2693,7 +3093,7 @@ function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
 	});
 }
 function HeaderBar({ adminOpen, onToggleAdmin }) {
-	const { adminToken, clock, link } = useOrion();
+	const { adminToken, clock, link, setTerminalDown } = useOrion();
 	const [now, setNow] = (0, import_react.useState)(null);
 	(0, import_react.useEffect)(() => {
 		setNow(fictionalNow(clock));
@@ -2704,9 +3104,17 @@ function HeaderBar({ adminOpen, onToggleAdmin }) {
 	const label = link === "on" ? "Online" : link === "off" ? "Sem sinal" : "Ligando";
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
 		className: "header-sheen flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line bg-panel px-3",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-			className: "min-w-0 truncate text-xs tracking-widest text-cyan",
-			children: "ORIONSOFTWARE"
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "flex min-w-0 items-center gap-2",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "min-w-0 truncate text-xs tracking-widest text-cyan",
+				children: "ORIONSOFTWARE"
+			}), adminToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				type: "button",
+				onClick: () => void setTerminalDown(true),
+				className: "term-btn min-h-11 border border-danger px-3 text-danger",
+				children: "Derrubar"
+			}) : null]
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "flex items-center gap-2 sm:gap-3",
 			children: [
@@ -3011,7 +3419,7 @@ function Viewer({ view, visible, onPassword }) {
 	});
 }
 function Shell() {
-	const { playerName, adminToken, user, download } = useOrion();
+	const { playerName, adminToken, user, download, blackout, record, setTerminalDown } = useOrion();
 	const [adminOpen, setAdminOpen] = (0, import_react.useState)(false);
 	const [tab, setTab] = (0, import_react.useState)("files");
 	const [activeId, setActiveId] = (0, import_react.useState)(null);
@@ -3036,7 +3444,10 @@ function Shell() {
 	}, [playerName]);
 	(0, import_react.useEffect)(() => {
 		const blocked = !!user && !Number(user.can_view_repository);
-		if (blocked && !wasBlocked.current) setView({ kind: "blocked" });
+		if (blocked && !wasBlocked.current) {
+			setView({ kind: "blocked" });
+			record("bloqueado");
+		}
 		if (!blocked && wasBlocked.current && view?.kind === "blocked") setView(null);
 		wasBlocked.current = blocked;
 	}, [user, view?.kind]);
@@ -3052,6 +3463,7 @@ function Shell() {
 			return;
 		}
 		if (raw.code === "PASSWORD_REQUIRED") {
+			if (password) record("senha-arquivo", raw.title || "ARQUIVO");
 			setView({
 				kind: "password",
 				id,
@@ -3060,6 +3472,7 @@ function Shell() {
 			return;
 		}
 		if (raw.code === "FILE_CORRUPTED") {
+			record("corrompido", raw.title || "ARQUIVO");
 			setView({
 				kind: "corrupted",
 				title: raw.title || "ARQUIVO",
@@ -3068,6 +3481,7 @@ function Shell() {
 			return;
 		}
 		if (raw.code === "REPOSITORY_BLOCKED") {
+			record("bloqueado");
 			setView({ kind: "blocked" });
 			return;
 		}
@@ -3078,6 +3492,7 @@ function Shell() {
 			});
 			return;
 		}
+		record("arquivo", raw.title);
 		setView({
 			kind: "doc",
 			doc: raw
@@ -3087,6 +3502,7 @@ function Shell() {
 		setActiveId(doc.id);
 		setTab("read");
 		if (Number(doc.corrupted)) {
+			record("corrompido", doc.title);
 			setView({
 				kind: "corrupted",
 				title: doc.title,
@@ -3162,11 +3578,15 @@ function Shell() {
 					children: item.label
 				}, item.id))
 			}),
+			blackout ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BlackoutStage, {
+				onRestore: adminToken ? () => void setTerminalDown(false) : void 0,
+				onOpenControl: adminToken && !adminOpen ? () => setAdminOpen(true) : void 0
+			}) : null,
 			adminOpen && adminToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, {
 				onClose: () => setAdminOpen(false),
 				focus: download?.status === "active" ? "download" : null
 			}) : null,
-			showTransfer && download ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TransferStage, {
+			showTransfer && download && !blackout ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TransferStage, {
 				job: download,
 				canControl: !!adminToken,
 				onDismiss: download.status === "active" ? void 0 : () => setDismissed(download.id)

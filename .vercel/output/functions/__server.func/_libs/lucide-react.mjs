@@ -260,6 +260,30 @@ var MessageSquare = createLucideIcon("message-square", [["path", {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var ScrollText = createLucideIcon("scroll-text", [
+	["path", {
+		d: "M15 12h-5",
+		key: "r7krc0"
+	}],
+	["path", {
+		d: "M15 8h-5",
+		key: "1khuty"
+	}],
+	["path", {
+		d: "M19 17V5a2 2 0 0 0-2-2H4",
+		key: "zz82l3"
+	}],
+	["path", {
+		d: "M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3",
+		key: "1ph1d7"
+	}]
+]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Terminal = createLucideIcon("terminal", [["polyline", {
 	points: "4 17 10 11 4 5",
 	key: "akl6gq"
@@ -327,4 +351,4 @@ var Zap = createLucideIcon("zap", [["path", {
 	key: "1xq2db"
 }]]);
 //#endregion
-export { MessageSquare as a, Folder as c, Download as d, Clock as f, Terminal as i, FolderTree as l, Users as n, Lock as o, ChevronLeft as p, TriangleAlert as r, LayoutDashboard as s, Zap as t, FileText as u };
+export { ScrollText as a, LayoutDashboard as c, FileText as d, Download as f, Terminal as i, Folder as l, ChevronLeft as m, Users as n, MessageSquare as o, Clock as p, TriangleAlert as r, Lock as s, Zap as t, FolderTree as u };

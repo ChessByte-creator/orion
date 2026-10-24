@@ -3,13 +3,14 @@ import { useOrion } from "@/components/orion/orion-context";
 import { cx, fmtTime, safeColor } from "@/lib/orion/format";
 
 export function ChatPanel({ visible }: { visible: boolean }) {
-  const { messages, user, playerName, sendPlayer, disconnect } = useOrion();
+  const { messages, user, playerName, sendPlayer, disconnect, typers, pulseType } = useOrion();
   const [text, setText] = useState("");
   const [stuck, setStuck] = useState(true);
   const [pending, setPending] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const canView = !user || !!Number(user.can_view_chat);
   const canWrite = !user || !!Number(user.can_write_chat);
+  const typing = typers.filter((item) => item.name.toUpperCase() !== playerName.toUpperCase());
 
   useEffect(() => {
     const box = boxRef.current;
@@ -92,13 +93,22 @@ export function ChatPanel({ visible }: { visible: boolean }) {
           novas mensagens
         </button>
       ) : null}
+      {typing.length ? (
+        <p className="border-t border-line px-3 py-2 text-xs text-dim">
+          {typing.map((item) => item.name).join(", ")} {typing.length > 1 ? "estão digitando" : "está digitando"}
+        </p>
+      ) : null}
       <form onSubmit={onSubmit} className="flex border-t border-line">
         <div className="flex items-center px-3 text-rose" aria-hidden="true">
           {">"}
         </div>
         <input
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            const next = event.target.value;
+            setText(next);
+            if (next.trim()) pulseType();
+          }}
           disabled={!canWrite}
           maxLength={300}
           autoComplete="off"
