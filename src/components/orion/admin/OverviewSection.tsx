@@ -4,15 +4,18 @@ import { ago, fmtTime, seenRecently } from "@/lib/orion/format";
 import { isSignal } from "@/lib/orion/signal";
 import type { ChatMessage, EventRow, Operator } from "@/lib/orion/types";
 import { useOrion } from "@/components/orion/orion-context";
-import { Btn, Feedback, SectionTitle, useFeedback } from "@/components/orion/admin/ui";
+import { Btn, Feedback, Field, SectionTitle, fieldClass, useFeedback } from "@/components/orion/admin/ui";
 import type { AdminSection } from "@/components/orion/admin/sections";
 
 export function OverviewSection({ active, onJump }: { active: boolean; onJump: (section: AdminSection) => void }) {
-  const { adminToken, clock, download, folderTick, blackout, setTerminalDown } = useOrion();
+  const { adminToken, clock, download, folderTick, seat, setSeat, setTerminalDown } = useOrion();
   const [users, setUsers] = useState<Operator[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [driver, setDriver] = useState("");
+  const [target, setTarget] = useState("*");
+  const [note, setNote] = useState("");
   const { fb, show } = useFeedback();
 
   useEffect(() => {
@@ -41,14 +44,64 @@ export function OverviewSection({ active, onJump }: { active: boolean; onJump: (
   }, [active, adminToken, folderTick]);
 
   const recent = users.filter((item) => seenRecently(item.last_seen)).length;
+  const names = [...new Set(users.map((item) => item.current_name))].sort();
 
   return (
     <div>
       <SectionTitle>Visão do terminal</SectionTitle>
-      <div className="mb-4">
-        <Btn tone={blackout ? "ok" : "danger"} onClick={() => void setTerminalDown(!blackout)}>
-          {blackout ? "Religar terminal" : "Derrubar terminal"}
+      <div className="mb-6 border border-line p-3">
+        <p className="text-xs tracking-widest text-dim uppercase">Quem está no comando</p>
+        <p className="mt-2 text-sm text-bright">{seat ? `${seat} usa o terminal. Os outros só assistem.` : "cada um no seu"}</p>
+        <Field label="Operador">
+          <select className={fieldClass} value={driver} onChange={(event) => setDriver(event.target.value)}>
+            <option value="">cada um no seu</option>
+            {names.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </Field>
+        <Btn
+          onClick={async () => {
+            await setSeat(driver);
+            show(driver ? `${driver} no comando.` : "Cada um no seu.");
+          }}
+        >
+          Aplicar
         </Btn>
+      </div>
+      <div className="mb-6 border border-line p-3">
+        <p className="text-xs tracking-widest text-dim uppercase">Derrubar sinal</p>
+        <Field label="Quem">
+          <select className={fieldClass} value={target} onChange={(event) => setTarget(event.target.value)}>
+            <option value="*">todos</option>
+            {names.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Mensagem na tela">
+          <input className={fieldClass} value={note} maxLength={140} onChange={(event) => setNote(event.target.value)} />
+        </Field>
+        <div className="flex flex-wrap gap-2">
+          <Btn
+            tone="danger"
+            onClick={async () => {
+              await setTerminalDown(true, target, note);
+              show(target === "*" ? "Sinal derrubado para todos." : `Sinal derrubado para ${target}.`);
+            }}
+          >
+            Derrubar
+          </Btn>
+          <Btn
+            tone="ok"
+            onClick={async () => {
+              await setTerminalDown(false, target);
+              show(target === "*" ? "Todos religados." : `${target} religado.`);
+            }}
+          >
+            Religar
+          </Btn>
+        </div>
       </div>
       {error ? <p className="mb-4 text-xs text-danger">{error}</p> : null}
       <div className="grid gap-3 sm:grid-cols-2">

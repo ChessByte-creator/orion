@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { apiFetch, readDownload } from "@/lib/orion/api";
 import { normalizeName } from "@/lib/orion/format";
-import { decodeSignal, encodeSignal, signalStamp, type LogAction } from "@/lib/orion/signal";
+import { decodeSignal, encodeSignal, isSignal, signalStamp, type LogAction } from "@/lib/orion/signal";
 import type { ChatMessage, ClockState, DownloadJob, Operator, SessionResponse } from "@/lib/orion/types";
 
 type LinkState = "wait" | "on" | "off";
@@ -19,6 +19,13 @@ export type Typer = {
   at: number;
 };
 
+export type Mirror = {
+  path: number[];
+  names: string[];
+  doc: number | null;
+  title: string;
+};
+
 type OrionValue = {
   playerName: string;
   adminToken: string;
@@ -30,6 +37,9 @@ type OrionValue = {
   download: DownloadJob | null;
   folderTick: number;
   blackout: boolean;
+  blackoutMessage: string;
+  seat: string;
+  mirror: Mirror | null;
   typers: Typer[];
   log: LogEntry[];
   connect: (raw: string) => Promise<string | null>;
@@ -41,7 +51,10 @@ type OrionValue = {
   setDownload: (job: DownloadJob | null) => void;
   record: (action: LogAction, subject?: string) => void;
   pulseType: (alias?: string) => void;
-  setTerminalDown: (down: boolean) => Promise<void>;
+  setTerminalDown: (down: boolean, who?: string, message?: string) => Promise<void>;
+  restoreTerminal: () => Promise<void>;
+  setSeat: (who: string) => Promise<void>;
+  postView: (path: number[], names: string[], doc: number | null, title?: string) => void;
 };
 
 const OrionContext = createContext<OrionValue | null>(null);
@@ -81,12 +94,18 @@ export function OrionProvider({ children }: { children: ReactNode }) {
   const [download, setDownload] = useState<DownloadJob | null>(null);
   const [folderTick, setFolderTick] = useState(0);
   const [chatEpoch, setChatEpoch] = useState(0);
-  const [blackout, setBlackout] = useState(false);
+  const [cuts, setCuts] = useState<Record<string, { on: boolean; message: string }>>({});
+  const [seat, setSeatState] = useState("");
+  const [mirror, setMirror] = useState<Mirror | null>(null);
   const [typers, setTypers] = useState<Typer[]>([]);
   const [log, setLog] = useState<LogEntry[]>([]);
   const nameRef = useRef("");
   const adminRef = useRef("");
+  const seatRef = useRef("");
   const typeAt = useRef(0);
+  const viewAt = useRef(0);
+  const viewTimer = useRef<number | null>(null);
+  const viewPending = useRef<{ path: number[]; names: string[]; doc: number | null; title?: string } | null>(null);
   const logAt = useRef({ key: "", at: 0 });
 
   useEffect(() => {
@@ -114,10 +133,28 @@ export function OrionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const takeSignal = useCallback((message: ChatMessage) => {
+    if (!isSignal(message.text)) return false;
     const signal = decodeSignal(message.text);
-    if (!signal) return false;
+    if (!signal) return true;
     if (signal.t === "down") {
-      if (CONTROL_SENDERS.has(message.sender)) setBlackout(signal.v === 1);
+      if (CONTROL_SENDERS.has(message.sender)) {
+        if (signal.v === 0 && signal.who === "*") setCuts({});
+        else setCuts((current) => ({ ...current, [signal.who]: { on: signal.v === 1, message: signal.m || "" } }));
+      }
+      return true;
+    }
+    if (signal.t === "seat") {
+      if (CONTROL_SENDERS.has(message.sender)) {
+        seatRef.current = signal.who;
+        setSeatState(signal.who);
+        if (!signal.who) setMirror(null);
+      }
+      return true;
+    }
+    if (signal.t === "view") {
+      if (seatRef.current && message.sender === seatRef.current && message.sender !== nameRef.current) {
+        setMirror({ path: signal.path, names: signal.names, doc: signal.doc, title: signal.title || "" });
+      }
       return true;
     }
     if (signal.t === "type") {
@@ -231,17 +268,78 @@ export function OrionProvider({ children }: { children: ReactNode }) {
     void apiFetch("/api/chat", "POST", { sender: name, text: encodeSignal({ t: "type" }) });
   }, []);
 
-  const setTerminalDown = useCallback(async (down: boolean) => {
-    setBlackout(down);
+  const setTerminalDown = useCallback(async (down: boolean, who = "*", message = "") => {
+    const target = who === "*" ? "*" : who.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 20) || "*";
+    const note = message.trim().replace(/\s+/g, " ").slice(0, 140);
+    if (!down && target === "*") setCuts({});
+    else setCuts((current) => ({ ...current, [target]: { on: down, message: down ? note : "" } }));
     if (!adminRef.current) return;
     await apiFetch(
       "/api/chat",
       "POST",
-      { sender: "[ORION-CONTROL]", text: encodeSignal({ t: "down", v: down ? 1 : 0 }) },
+      { sender: "[ORION-CONTROL]", text: encodeSignal({ t: "down", v: down ? 1 : 0, who: target, m: note || undefined }) },
       adminRef.current,
     );
-    record(down ? "caiu" : "voltou");
+    const subject = target === "*" ? note : `${target}${note ? ` — ${note}` : ""}`;
+    record(down ? "caiu" : "voltou", subject);
   }, [record]);
+
+  const cutsRef = useRef(cuts);
+  cutsRef.current = cuts;
+
+  const restoreTerminal = useCallback(async () => {
+    const name = nameRef.current;
+    if (name && cutsRef.current[name]?.on) await setTerminalDown(false, name);
+    if (cutsRef.current["*"]?.on) await setTerminalDown(false, "*");
+  }, [setTerminalDown]);
+
+  const setSeat = useCallback(async (who: string) => {
+    const name = who.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 20);
+    seatRef.current = name;
+    setSeatState(name);
+    if (!name) setMirror(null);
+    if (!adminRef.current) return;
+    await apiFetch(
+      "/api/chat",
+      "POST",
+      { sender: "[ORION-CONTROL]", text: encodeSignal({ t: "seat", who: name }) },
+      adminRef.current,
+    );
+    record("posto", name || "livre");
+  }, [record]);
+
+  const postView = useCallback((path: number[], names: string[], doc: number | null, title?: string) => {
+    const send = (payload: { path: number[]; names: string[]; doc: number | null; title?: string }) => {
+      const name = nameRef.current;
+      if (!name || seatRef.current !== name) return;
+      viewAt.current = Date.now();
+      void apiFetch("/api/chat", "POST", {
+        sender: name,
+        text: encodeSignal({
+          t: "view",
+          path: payload.path.slice(0, 8),
+          names: payload.names.slice(0, 8).map((item) => item.slice(0, 24)),
+          doc: payload.doc,
+          title: payload.title?.slice(0, 60),
+        }),
+      });
+    };
+    viewPending.current = { path, names, doc, title };
+    const wait = 400 - (Date.now() - viewAt.current);
+    if (wait <= 0) {
+      const payload = viewPending.current;
+      viewPending.current = null;
+      send(payload);
+      return;
+    }
+    if (viewTimer.current) window.clearTimeout(viewTimer.current);
+    viewTimer.current = window.setTimeout(() => {
+      viewTimer.current = null;
+      const payload = viewPending.current;
+      viewPending.current = null;
+      if (payload) send(payload);
+    }, wait);
+  }, []);
 
   async function connect(raw: string) {
     const name = normalizeName(raw);
@@ -253,7 +351,10 @@ export function OrionProvider({ children }: { children: ReactNode }) {
     setMessages([]);
     setLog([]);
     setTypers([]);
-    setBlackout(false);
+    setCuts({});
+    setSeatState("");
+    seatRef.current = "";
+    setMirror(null);
     nameRef.current = name;
     setPlayerName(name);
     setUser(res.user);
@@ -272,7 +373,10 @@ export function OrionProvider({ children }: { children: ReactNode }) {
     setDownload(null);
     setLog([]);
     setTypers([]);
-    setBlackout(false);
+    setCuts({});
+    setSeatState("");
+    seatRef.current = "";
+    setMirror(null);
     setLink("wait");
     setChatEpoch((value) => value + 1);
   }
@@ -304,9 +408,17 @@ export function OrionProvider({ children }: { children: ReactNode }) {
     setMessages([]);
     setLog([]);
     setTypers([]);
-    setBlackout(false);
+    setCuts({});
+    setSeatState("");
+    seatRef.current = "";
+    setMirror(null);
     setChatEpoch((value) => value + 1);
   }
+
+  const personal = playerName ? cuts[playerName] : undefined;
+  const everyone = cuts["*"];
+  const blackout = !!(personal?.on || everyone?.on);
+  const blackoutMessage = (personal?.on ? personal.message : "") || (everyone?.on ? everyone.message : "");
 
   const value: OrionValue = {
     playerName,
@@ -319,6 +431,9 @@ export function OrionProvider({ children }: { children: ReactNode }) {
     download,
     folderTick,
     blackout,
+    blackoutMessage,
+    seat,
+    mirror,
     typers,
     log,
     connect,
@@ -331,6 +446,9 @@ export function OrionProvider({ children }: { children: ReactNode }) {
     record,
     pulseType,
     setTerminalDown,
+    restoreTerminal,
+    setSeat,
+    postView,
   };
 
   return <OrionContext.Provider value={value}>{children}</OrionContext.Provider>;

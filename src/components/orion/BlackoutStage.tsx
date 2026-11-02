@@ -1,7 +1,9 @@
 export function BlackoutStage({
+  message,
   onRestore,
   onOpenControl,
 }: {
+  message?: string;
   onRestore?: () => void;
   onOpenControl?: () => void;
 }) {
@@ -9,6 +11,7 @@ export function BlackoutStage({
     <section className="dead-screen fixed inset-0 z-50 flex flex-col items-center justify-center" aria-live="assertive">
       <div className="dead-snow" aria-hidden="true" />
       <p className="relative text-xs tracking-widest text-dim">SEM SINAL</p>
+      {message ? <p className="relative mt-4 max-w-md px-6 text-center text-sm text-bright">{message}</p> : null}
       {onRestore || onOpenControl ? (
         <div className="relative mt-8 flex flex-wrap justify-center gap-2">
           {onRestore ? (

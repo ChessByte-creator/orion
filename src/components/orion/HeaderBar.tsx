@@ -5,11 +5,13 @@ import { cx, fictionalNow } from "@/lib/orion/format";
 export function HeaderBar({
   adminOpen,
   onToggleAdmin,
+  onDerrubar,
 }: {
   adminOpen: boolean;
   onToggleAdmin: () => void;
+  onDerrubar: () => void;
 }) {
-  const { adminToken, clock, link, setTerminalDown } = useOrion();
+  const { adminToken, clock, link } = useOrion();
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -28,7 +30,7 @@ export function HeaderBar({
         {adminToken ? (
           <button
             type="button"
-            onClick={() => void setTerminalDown(true)}
+            onClick={onDerrubar}
             className="term-btn min-h-11 border border-danger px-3 text-danger"
           >
             Derrubar

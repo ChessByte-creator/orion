@@ -1,7 +1,7 @@
 import { i as __toESM } from "../_runtime.mjs";
 import { K as require_react, b as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as ScrollText, c as LayoutDashboard, d as FileText, f as Download, i as Terminal, l as Folder, m as ChevronLeft, n as Users, o as MessageSquare, p as Clock, r as TriangleAlert, s as Lock, t as Zap, u as FolderTree } from "../_libs/lucide-react.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-CaWjTjQ_.js
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-HpSUerv8.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var ORION_API = "https://orion-terminal.sinalmudo.workers.dev";
@@ -271,9 +271,17 @@ var LOG_ACTIONS = [
 	"envio-fail",
 	"envio-off",
 	"caiu",
-	"voltou"
+	"voltou",
+	"posto"
 ];
 var MARK = "⁣orion:";
+function cleanWho(value, allowEmpty) {
+	const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+	if (raw === "*") return "*";
+	const name = raw.replace(/[^A-Z0-9_-]/g, "").slice(0, 20);
+	if (name) return name;
+	return allowEmpty ? "" : "*";
+}
 function encodeSignal(signal) {
 	return MARK + JSON.stringify(signal);
 }
@@ -284,11 +292,27 @@ function decodeSignal(text) {
 	if (typeof text !== "string" || !text.startsWith(MARK)) return null;
 	try {
 		const value = JSON.parse(text.slice(7));
-		if (value.t === "down") return {
-			t: "down",
-			v: value.v === 1 ? 1 : 0
-		};
+		if (value.t === "down") {
+			const message = typeof value.m === "string" ? value.m.slice(0, 140) : void 0;
+			return {
+				t: "down",
+				v: value.v === 1 ? 1 : 0,
+				who: cleanWho(value.who, false),
+				m: message
+			};
+		}
 		if (value.t === "type") return { t: "type" };
+		if (value.t === "seat") return {
+			t: "seat",
+			who: cleanWho(value.who, true)
+		};
+		if (value.t === "view" && Array.isArray(value.path) && Array.isArray(value.names)) return {
+			t: "view",
+			path: value.path.filter((item) => typeof item === "number").slice(0, 12),
+			names: value.names.filter((item) => typeof item === "string").map((item) => item.slice(0, 24)).slice(0, 12),
+			doc: typeof value.doc === "number" ? value.doc : null,
+			title: typeof value.title === "string" ? value.title.slice(0, 60) : void 0
+		};
 		if (value.t === "log" && LOG_ACTIONS.includes(value.a)) {
 			const subject = typeof value.s === "string" ? value.s.slice(0, 140) : void 0;
 			return {
@@ -339,12 +363,18 @@ function OrionProvider({ children }) {
 	const [download, setDownload] = (0, import_react.useState)(null);
 	const [folderTick, setFolderTick] = (0, import_react.useState)(0);
 	const [chatEpoch, setChatEpoch] = (0, import_react.useState)(0);
-	const [blackout, setBlackout] = (0, import_react.useState)(false);
+	const [cuts, setCuts] = (0, import_react.useState)({});
+	const [seat, setSeatState] = (0, import_react.useState)("");
+	const [mirror, setMirror] = (0, import_react.useState)(null);
 	const [typers, setTypers] = (0, import_react.useState)([]);
 	const [log, setLog] = (0, import_react.useState)([]);
 	const nameRef = (0, import_react.useRef)("");
 	const adminRef = (0, import_react.useRef)("");
+	const seatRef = (0, import_react.useRef)("");
 	const typeAt = (0, import_react.useRef)(0);
+	const viewAt = (0, import_react.useRef)(0);
+	const viewTimer = (0, import_react.useRef)(null);
+	const viewPending = (0, import_react.useRef)(null);
 	const logAt = (0, import_react.useRef)({
 		key: "",
 		at: 0
@@ -369,10 +399,37 @@ function OrionProvider({ children }) {
 		return () => window.clearInterval(id);
 	}, []);
 	const takeSignal = (0, import_react.useCallback)((message) => {
+		if (!isSignal(message.text)) return false;
 		const signal = decodeSignal(message.text);
-		if (!signal) return false;
+		if (!signal) return true;
 		if (signal.t === "down") {
-			if (CONTROL_SENDERS.has(message.sender)) setBlackout(signal.v === 1);
+			if (CONTROL_SENDERS.has(message.sender)) {
+				if (signal.v === 0 && signal.who === "*") setCuts({});
+				else setCuts((current) => ({
+					...current,
+					[signal.who]: {
+						on: signal.v === 1,
+						message: signal.m || ""
+					}
+				}));
+			}
+			return true;
+		}
+		if (signal.t === "seat") {
+			if (CONTROL_SENDERS.has(message.sender)) {
+				seatRef.current = signal.who;
+				setSeatState(signal.who);
+				if (!signal.who) setMirror(null);
+			}
+			return true;
+		}
+		if (signal.t === "view") {
+			if (seatRef.current && message.sender === seatRef.current && message.sender !== nameRef.current) setMirror({
+				path: signal.path,
+				names: signal.names,
+				doc: signal.doc,
+				title: signal.title || ""
+			});
 			return true;
 		}
 		if (signal.t === "type") {
@@ -492,18 +549,89 @@ function OrionProvider({ children }) {
 			text: encodeSignal({ t: "type" })
 		});
 	}, []);
-	const setTerminalDown = (0, import_react.useCallback)(async (down) => {
-		setBlackout(down);
+	const setTerminalDown = (0, import_react.useCallback)(async (down, who = "*", message = "") => {
+		const target = who === "*" ? "*" : who.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 20) || "*";
+		const note = message.trim().replace(/\s+/g, " ").slice(0, 140);
+		if (!down && target === "*") setCuts({});
+		else setCuts((current) => ({
+			...current,
+			[target]: {
+				on: down,
+				message: down ? note : ""
+			}
+		}));
 		if (!adminRef.current) return;
 		await apiFetch("/api/chat", "POST", {
 			sender: "[ORION-CONTROL]",
 			text: encodeSignal({
 				t: "down",
-				v: down ? 1 : 0
+				v: down ? 1 : 0,
+				who: target,
+				m: note || void 0
 			})
 		}, adminRef.current);
-		record(down ? "caiu" : "voltou");
+		const subject = target === "*" ? note : `${target}${note ? ` — ${note}` : ""}`;
+		record(down ? "caiu" : "voltou", subject);
 	}, [record]);
+	const cutsRef = (0, import_react.useRef)(cuts);
+	cutsRef.current = cuts;
+	const restoreTerminal = (0, import_react.useCallback)(async () => {
+		const name = nameRef.current;
+		if (name && cutsRef.current[name]?.on) await setTerminalDown(false, name);
+		if (cutsRef.current["*"]?.on) await setTerminalDown(false, "*");
+	}, [setTerminalDown]);
+	const setSeat = (0, import_react.useCallback)(async (who) => {
+		const name = who.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 20);
+		seatRef.current = name;
+		setSeatState(name);
+		if (!name) setMirror(null);
+		if (!adminRef.current) return;
+		await apiFetch("/api/chat", "POST", {
+			sender: "[ORION-CONTROL]",
+			text: encodeSignal({
+				t: "seat",
+				who: name
+			})
+		}, adminRef.current);
+		record("posto", name || "livre");
+	}, [record]);
+	const postView = (0, import_react.useCallback)((path, names, doc, title) => {
+		const send = (payload) => {
+			const name = nameRef.current;
+			if (!name || seatRef.current !== name) return;
+			viewAt.current = Date.now();
+			apiFetch("/api/chat", "POST", {
+				sender: name,
+				text: encodeSignal({
+					t: "view",
+					path: payload.path.slice(0, 8),
+					names: payload.names.slice(0, 8).map((item) => item.slice(0, 24)),
+					doc: payload.doc,
+					title: payload.title?.slice(0, 60)
+				})
+			});
+		};
+		viewPending.current = {
+			path,
+			names,
+			doc,
+			title
+		};
+		const wait = 400 - (Date.now() - viewAt.current);
+		if (wait <= 0) {
+			const payload = viewPending.current;
+			viewPending.current = null;
+			send(payload);
+			return;
+		}
+		if (viewTimer.current) window.clearTimeout(viewTimer.current);
+		viewTimer.current = window.setTimeout(() => {
+			viewTimer.current = null;
+			const payload = viewPending.current;
+			viewPending.current = null;
+			if (payload) send(payload);
+		}, wait);
+	}, []);
 	async function connect(raw) {
 		const name = normalizeName(raw);
 		if (!name) return "Identificador inválido. Use letras, números, _ ou -.";
@@ -514,7 +642,10 @@ function OrionProvider({ children }) {
 		setMessages([]);
 		setLog([]);
 		setTypers([]);
-		setBlackout(false);
+		setCuts({});
+		setSeatState("");
+		seatRef.current = "";
+		setMirror(null);
 		nameRef.current = name;
 		setPlayerName(name);
 		setUser(res.user);
@@ -544,7 +675,10 @@ function OrionProvider({ children }) {
 		setDownload(null);
 		setLog([]);
 		setTypers([]);
-		setBlackout(false);
+		setCuts({});
+		setSeatState("");
+		seatRef.current = "";
+		setMirror(null);
 		setLink("wait");
 		setChatEpoch((value) => value + 1);
 	}
@@ -583,9 +717,14 @@ function OrionProvider({ children }) {
 		setMessages([]);
 		setLog([]);
 		setTypers([]);
-		setBlackout(false);
+		setCuts({});
+		setSeatState("");
+		seatRef.current = "";
+		setMirror(null);
 		setChatEpoch((value) => value + 1);
 	}
+	const personal = playerName ? cuts[playerName] : void 0;
+	const everyone = cuts["*"];
 	const value = {
 		playerName,
 		adminToken,
@@ -596,7 +735,10 @@ function OrionProvider({ children }) {
 		messages,
 		download,
 		folderTick,
-		blackout,
+		blackout: !!(personal?.on || everyone?.on),
+		blackoutMessage: (personal?.on ? personal.message : "") || (everyone?.on ? everyone.message : ""),
+		seat,
+		mirror,
 		typers,
 		log,
 		connect,
@@ -608,7 +750,10 @@ function OrionProvider({ children }) {
 		setDownload,
 		record,
 		pulseType,
-		setTerminalDown
+		setTerminalDown,
+		restoreTerminal,
+		setSeat,
+		postView
 	};
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrionContext.Provider, {
 		value,
@@ -2019,7 +2164,8 @@ var LABEL = {
 	"envio-fail": "interrompeu a transferência",
 	"envio-off": "retirou a transferência",
 	caiu: "derrubou o terminal",
-	voltou: "religou o terminal"
+	voltou: "religou o terminal",
+	posto: "definiu quem está no comando"
 };
 var FILES = /* @__PURE__ */ new Set([
 	"pasta",
@@ -2039,7 +2185,8 @@ var MACHINE = /* @__PURE__ */ new Set([
 	"envio-fail",
 	"envio-off",
 	"caiu",
-	"voltou"
+	"voltou",
+	"posto"
 ]);
 var FILTERS = [
 	{
@@ -2111,11 +2258,14 @@ function LogSection() {
 	] });
 }
 function OverviewSection({ active, onJump }) {
-	const { adminToken, clock, download, folderTick, blackout, setTerminalDown } = useOrion();
+	const { adminToken, clock, download, folderTick, seat, setSeat, setTerminalDown } = useOrion();
 	const [users, setUsers] = (0, import_react.useState)([]);
 	const [events, setEvents] = (0, import_react.useState)([]);
 	const [messages, setMessages] = (0, import_react.useState)([]);
 	const [error, setError] = (0, import_react.useState)(null);
+	const [driver, setDriver] = (0, import_react.useState)("");
+	const [target, setTarget] = (0, import_react.useState)("*");
+	const [note, setNote] = (0, import_react.useState)("");
 	const { fb, show } = useFeedback();
 	(0, import_react.useEffect)(() => {
 		if (!active) return;
@@ -2146,15 +2296,94 @@ function OverviewSection({ active, onJump }) {
 		folderTick
 	]);
 	const recent = users.filter((item) => seenRecently(item.last_seen)).length;
+	const names = [...new Set(users.map((item) => item.current_name))].sort();
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SectionTitle, { children: "Visão do terminal" }),
-		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-			className: "mb-4",
-			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, {
-				tone: blackout ? "ok" : "danger",
-				onClick: () => void setTerminalDown(!blackout),
-				children: blackout ? "Religar terminal" : "Derrubar terminal"
-			})
+		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "mb-6 border border-line p-3",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "text-xs tracking-widest text-dim uppercase",
+					children: "Quem está no comando"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-2 text-sm text-bright",
+					children: seat ? `${seat} usa o terminal. Os outros só assistem.` : "cada um no seu"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+					label: "Operador",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+						className: fieldClass,
+						value: driver,
+						onChange: (event) => setDriver(event.target.value),
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+							value: "",
+							children: "cada um no seu"
+						}), names.map((name) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+							value: name,
+							children: name
+						}, name))]
+					})
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, {
+					onClick: async () => {
+						await setSeat(driver);
+						show(driver ? `${driver} no comando.` : "Cada um no seu.");
+					},
+					children: "Aplicar"
+				})
+			]
+		}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "mb-6 border border-line p-3",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "text-xs tracking-widest text-dim uppercase",
+					children: "Derrubar sinal"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+					label: "Quem",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+						className: fieldClass,
+						value: target,
+						onChange: (event) => setTarget(event.target.value),
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+							value: "*",
+							children: "todos"
+						}), names.map((name) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+							value: name,
+							children: name
+						}, name))]
+					})
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+					label: "Mensagem na tela",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+						className: fieldClass,
+						value: note,
+						maxLength: 140,
+						onChange: (event) => setNote(event.target.value)
+					})
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "flex flex-wrap gap-2",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, {
+						tone: "danger",
+						onClick: async () => {
+							await setTerminalDown(true, target, note);
+							show(target === "*" ? "Sinal derrubado para todos." : `Sinal derrubado para ${target}.`);
+						},
+						children: "Derrubar"
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, {
+						tone: "ok",
+						onClick: async () => {
+							await setTerminalDown(false, target);
+							show(target === "*" ? "Todos religados." : `${target} religado.`);
+						},
+						children: "Religar"
+					})]
+				})
+			]
 		}),
 		error ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "mb-4 text-xs text-danger",
@@ -2649,7 +2878,7 @@ function AdminPanel({ onClose, focus }) {
 		})]
 	});
 }
-function BlackoutStage({ onRestore, onOpenControl }) {
+function BlackoutStage({ message, onRestore, onOpenControl }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "dead-screen fixed inset-0 z-50 flex flex-col items-center justify-center",
 		"aria-live": "assertive",
@@ -2662,6 +2891,10 @@ function BlackoutStage({ onRestore, onOpenControl }) {
 				className: "relative text-xs tracking-widest text-dim",
 				children: "SEM SINAL"
 			}),
+			message ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "relative mt-4 max-w-md px-6 text-center text-sm text-bright",
+				children: message
+			}) : null,
 			onRestore || onOpenControl ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "relative mt-8 flex flex-wrap justify-center gap-2",
 				children: [onRestore ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
@@ -2679,14 +2912,85 @@ function BlackoutStage({ onRestore, onOpenControl }) {
 		]
 	});
 }
+var ctx = null;
+var enabled = true;
+try {
+	enabled = localStorage.getItem("orion-sound") !== "0";
+} catch {
+	enabled = true;
+}
+function unlockSound() {
+	if (!enabled || typeof window === "undefined") return;
+	const AudioCtx = window.AudioContext;
+	if (!AudioCtx) return;
+	ctx ??= new AudioCtx();
+	if (ctx.state === "suspended") ctx.resume();
+}
+function tone(freq, duration, peak, type, delay = 0) {
+	if (!enabled || !ctx) return;
+	const start = ctx.currentTime + delay;
+	const osc = ctx.createOscillator();
+	const gain = ctx.createGain();
+	osc.type = type;
+	osc.frequency.setValueAtTime(freq, start);
+	gain.gain.setValueAtTime(1e-4, start);
+	gain.gain.exponentialRampToValueAtTime(peak, start + .015);
+	gain.gain.exponentialRampToValueAtTime(1e-4, start + duration);
+	osc.connect(gain);
+	gain.connect(ctx.destination);
+	osc.start(start);
+	osc.stop(start + duration + .02);
+}
+function noise(duration, peak) {
+	if (!enabled || !ctx) return;
+	const length = Math.floor(ctx.sampleRate * duration);
+	const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+	const data = buffer.getChannelData(0);
+	for (let i = 0; i < length; i += 1) data[i] = Math.random() * 2 - 1;
+	const source = ctx.createBufferSource();
+	const gain = ctx.createGain();
+	const filter = ctx.createBiquadFilter();
+	source.buffer = buffer;
+	filter.type = "highpass";
+	filter.frequency.value = 900;
+	gain.gain.setValueAtTime(peak, ctx.currentTime);
+	gain.gain.exponentialRampToValueAtTime(1e-4, ctx.currentTime + duration);
+	source.connect(filter);
+	filter.connect(gain);
+	gain.connect(ctx.destination);
+	source.start();
+}
+function playTick() {
+	unlockSound();
+	noise(.03, .035);
+	tone(180, .04, .03, "square");
+}
+function playCut() {
+	unlockSound();
+	noise(.22, .12);
+	tone(90, .28, .08, "sawtooth");
+}
+function playAlarm() {
+	unlockSound();
+	tone(520, .16, .07, "square");
+	tone(780, .22, .07, "square", .18);
+}
+function playBlip() {
+	unlockSound();
+	tone(660, .07, .04, "square");
+}
+function playEnd(ok) {
+	unlockSound();
+	tone(ok ? 440 : 140, .24, .06, ok ? "triangle" : "sawtooth");
+}
 function ChatPanel({ visible }) {
-	const { messages, user, playerName, sendPlayer, disconnect, typers, pulseType } = useOrion();
+	const { messages, user, playerName, sendPlayer, disconnect, typers, pulseType, seat } = useOrion();
 	const [text, setText] = (0, import_react.useState)("");
 	const [stuck, setStuck] = (0, import_react.useState)(true);
 	const [pending, setPending] = (0, import_react.useState)(false);
 	const boxRef = (0, import_react.useRef)(null);
 	const canView = !user || !!Number(user.can_view_chat);
-	const canWrite = !user || !!Number(user.can_write_chat);
+	const canWrite = (!user || !!Number(user.can_write_chat)) && (!seat || seat === playerName);
 	const typing = typers.filter((item) => item.name.toUpperCase() !== playerName.toUpperCase());
 	(0, import_react.useEffect)(() => {
 		const box = boxRef.current;
@@ -2806,13 +3110,16 @@ function ChatPanel({ visible }) {
 						onChange: (event) => {
 							const next = event.target.value;
 							setText(next);
-							if (next.trim()) pulseType();
+							if (next.trim()) {
+								playTick();
+								pulseType();
+							}
 						},
 						disabled: !canWrite,
 						maxLength: 300,
 						autoComplete: "off",
 						spellCheck: false,
-						placeholder: canWrite ? "enviar mensagem..." : "envio bloqueado pelo controle",
+						placeholder: seat && seat !== playerName ? `assistindo ${seat}` : canWrite ? "enviar mensagem..." : "envio bloqueado pelo controle",
 						className: "min-h-11 min-w-0 flex-1 bg-transparent text-sm text-bright outline-none placeholder:text-dim disabled:opacity-60"
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
@@ -2885,7 +3192,7 @@ function CredentialForm({ title, error, onSubmit, onBack }) {
 		]
 	});
 }
-function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
+function Explorer({ activeId, visible, locked, follow, onOpenDoc, onNavigate, onPlace }) {
 	const { playerName, user, folderTick, record } = useOrion();
 	const [stack, setStack] = (0, import_react.useState)([]);
 	const [folders, setFolders] = (0, import_react.useState)([]);
@@ -2962,17 +3269,29 @@ function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
 		repoBlocked,
 		stack
 	]);
+	const followKey = follow?.map((item) => item.id).join(",") ?? "";
+	(0, import_react.useEffect)(() => {
+		if (!follow) return;
+		setPrompt(null);
+		setStack(follow);
+	}, [followKey]);
+	(0, import_react.useEffect)(() => {
+		onPlace?.(stack);
+	}, [stack, onPlace]);
 	function goRoot() {
+		if (locked) return;
 		onNavigate();
 		setFilter("");
 		setStack([]);
 	}
 	function goTo(index) {
+		if (locked) return;
 		onNavigate();
 		setFilter("");
 		setStack((current) => current.slice(0, index + 1));
 	}
 	function goBack() {
+		if (locked) return;
 		onNavigate();
 		setFilter("");
 		setStack((current) => current.slice(0, -1));
@@ -3012,13 +3331,17 @@ function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 					value: filter,
 					onChange: (event) => setFilter(event.target.value),
+					disabled: locked,
 					placeholder: "filtrar nesta pasta",
 					className: "min-h-11 w-full border border-line bg-bg px-3 text-sm text-bright outline-none focus:border-cyan"
 				})
 			}) : null,
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "min-h-0 flex-1 overflow-y-auto",
-				children: prompt ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CredentialForm, {
+				children: prompt ? locked ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "px-3 py-4 text-xs text-dim",
+					children: "// credencial exigida para quem está no terminal"
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CredentialForm, {
 					title: prompt.name,
 					error: prompt.error,
 					onBack: stack.length ? goBack : void 0,
@@ -3037,10 +3360,13 @@ function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
 						}), ".."]
 					}) : null,
 					shownFolders.map((folder) => {
-						const locked = !!Number(folder.password_protected);
+						const sealed = !!Number(folder.password_protected);
 						return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 							type: "button",
+							disabled: locked,
 							onClick: () => {
+								if (locked) return;
+								playTick();
 								onNavigate();
 								setFilter("");
 								setPrompt(null);
@@ -3051,23 +3377,28 @@ function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
 									name: folder.name
 								}]);
 							},
-							className: "file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-fg hover:bg-hover",
-							children: [locked ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Lock, { className: "size-4 shrink-0 text-amber" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Folder, { className: "size-4 shrink-0 text-violet" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-fg hover:bg-hover disabled:opacity-60",
+							children: [sealed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Lock, { className: "size-4 shrink-0 text-amber" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Folder, { className: "size-4 shrink-0 text-violet" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "min-w-0 flex-1 truncate",
 								children: folder.name
 							})]
 						}, folder.id);
 					}),
 					shownDocs.map((doc) => {
-						const locked = !!Number(doc.password_protected);
+						const sealed = !!Number(doc.password_protected);
 						const corrupted = !!Number(doc.corrupted);
 						const active = activeId === doc.id;
 						return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 							type: "button",
-							onClick: () => onOpenDoc(doc),
-							className: cx("file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-hover", active ? "bg-cyan/10 text-cyan" : "text-fg", corrupted && "text-danger"),
+							disabled: locked,
+							onClick: () => {
+								if (locked) return;
+								playTick();
+								onOpenDoc(doc);
+							},
+							className: cx("file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-hover disabled:opacity-60", active ? "bg-cyan/10 text-cyan" : "text-fg", corrupted && "text-danger"),
 							children: [
-								locked ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Lock, { className: "size-4 shrink-0 text-amber" }) : corrupted ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TriangleAlert, { className: "size-4 shrink-0 text-danger" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileText, { className: "size-4 shrink-0 text-cyan-dim" }),
+								sealed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Lock, { className: "size-4 shrink-0 text-amber" }) : corrupted ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TriangleAlert, { className: "size-4 shrink-0 text-danger" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileText, { className: "size-4 shrink-0 text-cyan-dim" }),
 								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 									className: "min-w-0 flex-1 truncate",
 									children: doc.title
@@ -3092,8 +3423,8 @@ function Explorer({ activeId, visible, onOpenDoc, onNavigate }) {
 		]
 	});
 }
-function HeaderBar({ adminOpen, onToggleAdmin }) {
-	const { adminToken, clock, link, setTerminalDown } = useOrion();
+function HeaderBar({ adminOpen, onToggleAdmin, onDerrubar }) {
+	const { adminToken, clock, link } = useOrion();
 	const [now, setNow] = (0, import_react.useState)(null);
 	(0, import_react.useEffect)(() => {
 		setNow(fictionalNow(clock));
@@ -3111,7 +3442,7 @@ function HeaderBar({ adminOpen, onToggleAdmin }) {
 				children: "ORIONSOFTWARE"
 			}), adminToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 				type: "button",
-				onClick: () => void setTerminalDown(true),
+				onClick: onDerrubar,
 				className: "term-btn min-h-11 border border-danger px-3 text-danger",
 				children: "Derrubar"
 			}) : null]
@@ -3419,14 +3750,47 @@ function Viewer({ view, visible, onPassword }) {
 	});
 }
 function Shell() {
-	const { playerName, adminToken, user, download, blackout, record, setTerminalDown } = useOrion();
+	const { playerName, adminToken, user, download, blackout, blackoutMessage, seat, mirror, record, restoreTerminal, postView } = useOrion();
 	const [adminOpen, setAdminOpen] = (0, import_react.useState)(false);
+	const [panelFocus, setPanelFocus] = (0, import_react.useState)(null);
 	const [tab, setTab] = (0, import_react.useState)("files");
 	const [activeId, setActiveId] = (0, import_react.useState)(null);
 	const [view, setView] = (0, import_react.useState)(null);
 	const [dismissed, setDismissed] = (0, import_react.useState)(null);
 	const openedAdmin = (0, import_react.useRef)(false);
 	const wasBlocked = (0, import_react.useRef)(false);
+	const stackRef = (0, import_react.useRef)([]);
+	const wasDown = (0, import_react.useRef)(false);
+	const jobKey = (0, import_react.useRef)("");
+	const followed = (0, import_react.useRef)(null);
+	const watching = !!seat && seat !== playerName;
+	const follow = watching && mirror ? mirror.path.map((id, index) => ({
+		id,
+		name: mirror.names[index] || String(id)
+	})) : null;
+	(0, import_react.useEffect)(() => {
+		const onPointer = () => unlockSound();
+		window.addEventListener("pointerdown", onPointer);
+		return () => window.removeEventListener("pointerdown", onPointer);
+	}, []);
+	(0, import_react.useEffect)(() => {
+		if (blackout && !wasDown.current) playCut();
+		wasDown.current = blackout;
+	}, [blackout]);
+	(0, import_react.useEffect)(() => {
+		if (!download) {
+			jobKey.current = "";
+			return;
+		}
+		const key = `${download.id}:${download.status}:${download.percent}`;
+		if (key === jobKey.current) return;
+		const previous = jobKey.current;
+		jobKey.current = key;
+		const [prevId, prevStatus] = previous.split(":");
+		if (download.status === "active" && (prevId !== String(download.id) || prevStatus !== "active")) playAlarm();
+		else if (download.status === "active") playBlip();
+		else playEnd(download.status === "ok");
+	}, [download]);
 	(0, import_react.useEffect)(() => {
 		if (playerName && adminToken && !openedAdmin.current) {
 			openedAdmin.current = true;
@@ -3446,11 +3810,36 @@ function Shell() {
 		const blocked = !!user && !Number(user.can_view_repository);
 		if (blocked && !wasBlocked.current) {
 			setView({ kind: "blocked" });
-			record("bloqueado");
+			if (!watching) record("bloqueado");
 		}
 		if (!blocked && wasBlocked.current && view?.kind === "blocked") setView(null);
 		wasBlocked.current = blocked;
-	}, [user, view?.kind]);
+	}, [
+		user,
+		view?.kind,
+		watching,
+		record
+	]);
+	(0, import_react.useEffect)(() => {
+		if (!watching) {
+			followed.current = null;
+			return;
+		}
+		if (!mirror?.doc || followed.current === mirror.doc) return;
+		followed.current = mirror.doc;
+		setActiveId(mirror.doc);
+		setTab("read");
+		fetchDoc(mirror.doc, null);
+	}, [watching, mirror?.doc]);
+	(0, import_react.useEffect)(() => {
+		if (seat !== playerName) return;
+		postView(stackRef.current.map((item) => item.id), stackRef.current.map((item) => item.name), activeId);
+	}, [
+		seat,
+		playerName,
+		activeId,
+		postView
+	]);
 	async function fetchDoc(id, password) {
 		setView({ kind: "loading" });
 		const pw = password ? `&password=${encodeURIComponent(password)}` : "";
@@ -3463,6 +3852,13 @@ function Shell() {
 			return;
 		}
 		if (raw.code === "PASSWORD_REQUIRED") {
+			if (watching) {
+				setView({
+					kind: "error",
+					message: "credencial exigida para quem está no terminal"
+				});
+				return;
+			}
 			if (password) record("senha-arquivo", raw.title || "ARQUIVO");
 			setView({
 				kind: "password",
@@ -3472,7 +3868,7 @@ function Shell() {
 			return;
 		}
 		if (raw.code === "FILE_CORRUPTED") {
-			record("corrompido", raw.title || "ARQUIVO");
+			if (!watching) record("corrompido", raw.title || "ARQUIVO");
 			setView({
 				kind: "corrupted",
 				title: raw.title || "ARQUIVO",
@@ -3481,7 +3877,7 @@ function Shell() {
 			return;
 		}
 		if (raw.code === "REPOSITORY_BLOCKED") {
-			record("bloqueado");
+			if (!watching) record("bloqueado");
 			setView({ kind: "blocked" });
 			return;
 		}
@@ -3492,13 +3888,16 @@ function Shell() {
 			});
 			return;
 		}
-		record("arquivo", raw.title);
+		if (!watching) record("arquivo", raw.title);
+		if (seat === playerName) postView(stackRef.current.map((item) => item.id), stackRef.current.map((item) => item.name), raw.id, raw.title);
 		setView({
 			kind: "doc",
 			doc: raw
 		});
 	}
 	function openDoc(doc) {
+		if (watching) return;
+		playTick();
 		setActiveId(doc.id);
 		setTab("read");
 		if (Number(doc.corrupted)) {
@@ -3508,6 +3907,7 @@ function Shell() {
 				title: doc.title,
 				fileSize: doc.file_size
 			});
+			if (seat === playerName) postView(stackRef.current.map((item) => item.id), stackRef.current.map((item) => item.name), doc.id, doc.title);
 			return;
 		}
 		if (Number(doc.password_protected)) {
@@ -3546,27 +3946,46 @@ function Shell() {
 		children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(HeaderBar, {
 				adminOpen,
-				onToggleAdmin: () => setAdminOpen((open) => !open)
+				onToggleAdmin: () => setAdminOpen((open) => !open),
+				onDerrubar: () => {
+					setPanelFocus("overview");
+					setAdminOpen(true);
+				}
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "flex min-h-0 flex-1",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Explorer, {
 					activeId,
 					visible: tab === "files",
+					locked: watching,
+					follow,
 					onOpenDoc: openDoc,
 					onNavigate: () => {
+						if (watching) return;
 						setActiveId(null);
 						setView(null);
+					},
+					onPlace: (stack) => {
+						stackRef.current = stack;
+						if (seat === playerName) postView(stack.map((item) => item.id), stack.map((item) => item.name), activeId);
 					}
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: cx("min-w-0 flex-1 flex-col", tab === "files" ? "hidden md:flex" : "flex"),
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Viewer, {
-						view,
-						visible: tab === "read",
-						onPassword: async (id, password) => {
-							await fetchDoc(id, password);
-						}
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChatPanel, { visible: tab === "chat" })]
+					children: [
+						seat ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "border-b border-line px-3 py-2 text-xs tracking-widest text-dim uppercase",
+							children: watching ? `assistindo ${seat}` : "no comando"
+						}) : null,
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Viewer, {
+							view,
+							visible: tab === "read",
+							onPassword: async (id, password) => {
+								if (watching) return;
+								await fetchDoc(id, password);
+							}
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChatPanel, { visible: tab === "chat" })
+					]
 				})]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("nav", {
@@ -3579,12 +3998,13 @@ function Shell() {
 				}, item.id))
 			}),
 			blackout ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BlackoutStage, {
-				onRestore: adminToken ? () => void setTerminalDown(false) : void 0,
+				message: blackoutMessage,
+				onRestore: adminToken ? () => void restoreTerminal() : void 0,
 				onOpenControl: adminToken && !adminOpen ? () => setAdminOpen(true) : void 0
 			}) : null,
 			adminOpen && adminToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdminPanel, {
 				onClose: () => setAdminOpen(false),
-				focus: download?.status === "active" ? "download" : null
+				focus: panelFocus ?? (download?.status === "active" ? "download" : null)
 			}) : null,
 			showTransfer && download && !blackout ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TransferStage, {
 				job: download,

@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useOrion } from "@/components/orion/orion-context";
 import { cx, fmtTime, safeColor } from "@/lib/orion/format";
+import { playTick } from "@/lib/orion/sound";
 
 export function ChatPanel({ visible }: { visible: boolean }) {
-  const { messages, user, playerName, sendPlayer, disconnect, typers, pulseType } = useOrion();
+  const { messages, user, playerName, sendPlayer, disconnect, typers, pulseType, seat } = useOrion();
   const [text, setText] = useState("");
   const [stuck, setStuck] = useState(true);
   const [pending, setPending] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const canView = !user || !!Number(user.can_view_chat);
-  const canWrite = !user || !!Number(user.can_write_chat);
+  const canWrite = (!user || !!Number(user.can_write_chat)) && (!seat || seat === playerName);
   const typing = typers.filter((item) => item.name.toUpperCase() !== playerName.toUpperCase());
 
   useEffect(() => {
@@ -107,13 +108,16 @@ export function ChatPanel({ visible }: { visible: boolean }) {
           onChange={(event) => {
             const next = event.target.value;
             setText(next);
-            if (next.trim()) pulseType();
+            if (next.trim()) {
+              playTick();
+              pulseType();
+            }
           }}
           disabled={!canWrite}
           maxLength={300}
           autoComplete="off"
           spellCheck={false}
-          placeholder={canWrite ? "enviar mensagem..." : "envio bloqueado pelo controle"}
+          placeholder={seat && seat !== playerName ? `assistindo ${seat}` : canWrite ? "enviar mensagem..." : "envio bloqueado pelo controle"}
           className="min-h-11 min-w-0 flex-1 bg-transparent text-sm text-bright outline-none placeholder:text-dim disabled:opacity-60"
         />
         <button type="submit" disabled={!canWrite || !text.trim()} className="term-btn min-h-11 border-l border-line px-4 text-dim hover:text-rose disabled:opacity-40">

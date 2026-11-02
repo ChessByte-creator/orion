@@ -21,11 +21,12 @@ const LABEL: Record<LogAction, string> = {
   "envio-off": "retirou a transferência",
   caiu: "derrubou o terminal",
   voltou: "religou o terminal",
+  posto: "definiu quem está no comando",
 };
 
 const FILES = new Set<LogAction>(["pasta", "senha-pasta", "arquivo", "senha-arquivo", "corrompido", "bloqueado"]);
 const CHANNEL = new Set<LogAction>(["canal"]);
-const MACHINE = new Set<LogAction>(["entrou", "saiu", "envio", "envio-pct", "envio-ok", "envio-fail", "envio-off", "caiu", "voltou"]);
+const MACHINE = new Set<LogAction>(["entrou", "saiu", "envio", "envio-pct", "envio-ok", "envio-fail", "envio-off", "caiu", "voltou", "posto"]);
 
 const FILTERS = [
   { id: "all", label: "Tudo" },

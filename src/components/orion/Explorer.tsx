@@ -4,18 +4,25 @@ import { CredentialForm } from "@/components/orion/CredentialForm";
 import { useOrion } from "@/components/orion/orion-context";
 import { apiFetch, readList } from "@/lib/orion/api";
 import { cx } from "@/lib/orion/format";
+import { playTick } from "@/lib/orion/sound";
 import type { DocListRow, FolderRow } from "@/lib/orion/types";
 
 export function Explorer({
   activeId,
   visible,
+  locked,
+  follow,
   onOpenDoc,
   onNavigate,
+  onPlace,
 }: {
   activeId: number | null;
   visible: boolean;
+  locked?: boolean;
+  follow?: Array<{ id: number; name: string }> | null;
   onOpenDoc: (doc: DocListRow) => void;
   onNavigate: () => void;
+  onPlace?: (stack: Array<{ id: number; name: string }>) => void;
 }) {
   const { playerName, user, folderTick, record } = useOrion();
   const [stack, setStack] = useState<Array<{ id: number; name: string }>>([]);
@@ -109,19 +116,33 @@ export function Explorer({
     };
   }, [playerName, folderTick, repoBlocked, stack]);
 
+  const followKey = follow?.map((item) => item.id).join(",") ?? "";
+  useEffect(() => {
+    if (!follow) return;
+    setPrompt(null);
+    setStack(follow);
+  }, [followKey]);
+
+  useEffect(() => {
+    onPlace?.(stack);
+  }, [stack, onPlace]);
+
   function goRoot() {
+    if (locked) return;
     onNavigate();
     setFilter("");
     setStack([]);
   }
 
   function goTo(index: number) {
+    if (locked) return;
     onNavigate();
     setFilter("");
     setStack((current) => current.slice(0, index + 1));
   }
 
   function goBack() {
+    if (locked) return;
     onNavigate();
     setFilter("");
     setStack((current) => current.slice(0, -1));
@@ -152,6 +173,7 @@ export function Explorer({
           <input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
+            disabled={locked}
             placeholder="filtrar nesta pasta"
             className="min-h-11 w-full border border-line bg-bg px-3 text-sm text-bright outline-none focus:border-cyan"
           />
@@ -159,6 +181,9 @@ export function Explorer({
       ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {prompt ? (
+          locked ? (
+            <p className="px-3 py-4 text-xs text-dim">// credencial exigida para quem está no terminal</p>
+          ) : (
           <CredentialForm
             title={prompt.name}
             error={prompt.error}
@@ -168,6 +193,7 @@ export function Explorer({
               setStack((current) => [...current]);
             }}
           />
+          )
         ) : (
           <>
             {stack.length > 0 ? (
@@ -177,12 +203,15 @@ export function Explorer({
               </button>
             ) : null}
             {shownFolders.map((folder) => {
-              const locked = !!Number(folder.password_protected);
+              const sealed = !!Number(folder.password_protected);
               return (
                 <button
                   key={folder.id}
                   type="button"
+                  disabled={locked}
                   onClick={() => {
+                    if (locked) return;
+                    playTick();
                     onNavigate();
                     setFilter("");
                     setPrompt(null);
@@ -190,29 +219,34 @@ export function Explorer({
                     record("pasta", path);
                     setStack((current) => [...current, { id: folder.id, name: folder.name }]);
                   }}
-                  className="file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-fg hover:bg-hover"
+                  className="file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-fg hover:bg-hover disabled:opacity-60"
                 >
-                  {locked ? <Lock className="size-4 shrink-0 text-amber" /> : <Folder className="size-4 shrink-0 text-violet" />}
+                  {sealed ? <Lock className="size-4 shrink-0 text-amber" /> : <Folder className="size-4 shrink-0 text-violet" />}
                   <span className="min-w-0 flex-1 truncate">{folder.name}</span>
                 </button>
               );
             })}
             {shownDocs.map((doc) => {
-              const locked = !!Number(doc.password_protected);
+              const sealed = !!Number(doc.password_protected);
               const corrupted = !!Number(doc.corrupted);
               const active = activeId === doc.id;
               return (
                 <button
                   key={doc.id}
                   type="button"
-                  onClick={() => onOpenDoc(doc)}
+                  disabled={locked}
+                  onClick={() => {
+                    if (locked) return;
+                    playTick();
+                    onOpenDoc(doc);
+                  }}
                   className={cx(
-                    "file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-hover",
+                    "file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-hover disabled:opacity-60",
                     active ? "bg-cyan/10 text-cyan" : "text-fg",
                     corrupted && "text-danger",
                   )}
                 >
-                  {locked ? (
+                  {sealed ? (
                     <Lock className="size-4 shrink-0 text-amber" />
                   ) : corrupted ? (
                     <AlertTriangle className="size-4 shrink-0 text-danger" />
