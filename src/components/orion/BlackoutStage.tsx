@@ -10,8 +10,14 @@ export function BlackoutStage({
   return (
     <section className="dead-screen fixed inset-0 z-50 flex flex-col items-center justify-center" aria-live="assertive">
       <div className="dead-snow" aria-hidden="true" />
-      <p className="relative text-xs tracking-widest text-dim">SEM SINAL</p>
-      {message ? <p className="relative mt-4 max-w-md px-6 text-center text-sm text-bright">{message}</p> : null}
+      {message ? (
+        <>
+          <p className="relative text-xs tracking-widest text-dim">SEM SINAL</p>
+          <p className="relative mt-5 max-w-xl px-8 text-center text-2xl leading-snug tracking-wide text-bright sm:text-3xl">{message}</p>
+        </>
+      ) : (
+        <p className="relative text-sm tracking-widest text-dim">SEM SINAL</p>
+      )}
       {onRestore || onOpenControl ? (
         <div className="relative mt-8 flex flex-wrap justify-center gap-2">
           {onRestore ? (

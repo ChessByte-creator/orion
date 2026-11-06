@@ -37,15 +37,38 @@ const FILTERS = [
 
 type FilterId = (typeof FILTERS)[number]["id"];
 
+type Shown = {
+  id: number;
+  at?: string;
+  name: string;
+  action: LogAction;
+  subject: string;
+};
+
+function collapsePercents(entries: Shown[]): Shown[] {
+  const out: Shown[] = [];
+  for (const entry of entries) {
+    const last = out[out.length - 1];
+    if (entry.action === "envio-pct" && last?.action === "envio-pct" && last.name === entry.name) {
+      last.subject = entry.subject;
+      last.at = entry.at;
+      continue;
+    }
+    out.push({ ...entry });
+  }
+  return out;
+}
+
 export function LogSection() {
   const { log } = useOrion();
   const [filter, setFilter] = useState<FilterId>("all");
-  const rows = [...log].reverse().filter((entry) => {
+  const filtered = log.filter((entry) => {
     if (filter === "files") return FILES.has(entry.action);
     if (filter === "channel") return CHANNEL.has(entry.action);
     if (filter === "machine") return MACHINE.has(entry.action);
     return true;
   });
+  const rows = collapsePercents(filtered).reverse();
 
   return (
     <div>

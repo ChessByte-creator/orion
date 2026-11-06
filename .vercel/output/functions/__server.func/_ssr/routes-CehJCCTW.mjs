@@ -1,7 +1,7 @@
 import { i as __toESM } from "../_runtime.mjs";
 import { K as require_react, b as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as ScrollText, c as LayoutDashboard, d as FileText, f as Download, i as Terminal, l as Folder, m as ChevronLeft, n as Users, o as MessageSquare, p as Clock, r as TriangleAlert, s as Lock, t as Zap, u as FolderTree } from "../_libs/lucide-react.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-HpSUerv8.js
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-CehJCCTW.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var ORION_API = "https://orion-terminal.sinalmudo.workers.dev";
@@ -2206,15 +2206,28 @@ var FILTERS = [
 		label: "Terminal"
 	}
 ];
+function collapsePercents(entries) {
+	const out = [];
+	for (const entry of entries) {
+		const last = out[out.length - 1];
+		if (entry.action === "envio-pct" && last?.action === "envio-pct" && last.name === entry.name) {
+			last.subject = entry.subject;
+			last.at = entry.at;
+			continue;
+		}
+		out.push({ ...entry });
+	}
+	return out;
+}
 function LogSection() {
 	const { log } = useOrion();
 	const [filter, setFilter] = (0, import_react.useState)("all");
-	const rows = [...log].reverse().filter((entry) => {
+	const rows = collapsePercents(log.filter((entry) => {
 		if (filter === "files") return FILES.has(entry.action);
 		if (filter === "channel") return CHANNEL.has(entry.action);
 		if (filter === "machine") return MACHINE.has(entry.action);
 		return true;
-	});
+	})).reverse();
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SectionTitle, { children: "Registro" }),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
@@ -2887,14 +2900,16 @@ function BlackoutStage({ message, onRestore, onOpenControl }) {
 				className: "dead-snow",
 				"aria-hidden": "true"
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			message ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "relative text-xs tracking-widest text-dim",
 				children: "SEM SINAL"
-			}),
-			message ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "relative mt-4 max-w-md px-6 text-center text-sm text-bright",
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "relative mt-5 max-w-xl px-8 text-center text-2xl leading-snug tracking-wide text-bright sm:text-3xl",
 				children: message
-			}) : null,
+			})] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "relative text-sm tracking-widest text-dim",
+				children: "SEM SINAL"
+			}),
 			onRestore || onOpenControl ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "relative mt-8 flex flex-wrap justify-center gap-2",
 				children: [onRestore ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
@@ -3297,16 +3312,19 @@ function Explorer({ activeId, visible, locked, follow, onOpenDoc, onNavigate, on
 		setStack((current) => current.slice(0, -1));
 	}
 	const query = filter.trim().toLowerCase();
-	const shownFolders = query ? folders.filter((folder) => folder.name.toLowerCase().includes(query)) : folders;
-	const shownDocs = query ? docs.filter((doc) => doc.title.toLowerCase().includes(query)) : docs;
+	const shownFolders = query && !locked ? folders.filter((folder) => folder.name.toLowerCase().includes(query)) : folders;
+	const shownDocs = query && !locked ? docs.filter((doc) => doc.title.toLowerCase().includes(query)) : docs;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
-		className: cx("min-h-0 w-full shrink-0 flex-col border-line bg-panel md:w-72 md:border-r", visible ? "flex" : "hidden md:flex"),
+		className: cx("min-h-0 w-full shrink-0 flex-col border-line bg-panel md:w-72 md:border-r", !!locked && activeId != null ? visible ? "flex md:hidden" : "hidden" : visible ? "flex" : "hidden md:flex"),
 		children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "border-b border-line px-3 py-3 text-xs tracking-widest text-dim uppercase",
-				children: "Sistema de arquivos"
+				children: locked ? "Na tela" : "Sistema de arquivos"
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			locked ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "border-b border-line px-3 py-3 text-xs leading-relaxed text-dim",
+				children: stack.length ? `~/ ${stack.map((crumb) => crumb.name).join(" / ")}` : "~/"
+			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "flex min-h-11 flex-wrap items-center gap-1 border-b border-line px-2 py-1 text-xs",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 					type: "button",
@@ -3326,12 +3344,11 @@ function Explorer({ activeId, visible, locked, follow, onOpenDoc, onNavigate, on
 					})]
 				}, crumb.id))]
 			}),
-			!prompt && (folders.length > 0 || docs.length > 0) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			!locked && !prompt && (folders.length > 0 || docs.length > 0) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "border-b border-line px-3 py-2",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 					value: filter,
 					onChange: (event) => setFilter(event.target.value),
-					disabled: locked,
 					placeholder: "filtrar nesta pasta",
 					className: "min-h-11 w-full border border-line bg-bg px-3 text-sm text-bright outline-none focus:border-cyan"
 				})
@@ -3350,7 +3367,7 @@ function Explorer({ activeId, visible, locked, follow, onOpenDoc, onNavigate, on
 						setStack((current) => [...current]);
 					}
 				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-					stack.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+					stack.length > 0 && !locked ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 						type: "button",
 						onClick: goBack,
 						className: "flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-dim hover:bg-hover hover:text-bright",
@@ -3361,11 +3378,17 @@ function Explorer({ activeId, visible, locked, follow, onOpenDoc, onNavigate, on
 					}) : null,
 					shownFolders.map((folder) => {
 						const sealed = !!Number(folder.password_protected);
-						return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						const body = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [sealed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Lock, { className: "size-4 shrink-0 text-amber" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Folder, { className: "size-4 shrink-0 text-violet" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "min-w-0 flex-1 truncate",
+							children: folder.name
+						})] });
+						if (locked) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-fg",
+							children: body
+						}, folder.id);
+						return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 							type: "button",
-							disabled: locked,
 							onClick: () => {
-								if (locked) return;
 								playTick();
 								onNavigate();
 								setFilter("");
@@ -3377,37 +3400,38 @@ function Explorer({ activeId, visible, locked, follow, onOpenDoc, onNavigate, on
 									name: folder.name
 								}]);
 							},
-							className: "file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-fg hover:bg-hover disabled:opacity-60",
-							children: [sealed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Lock, { className: "size-4 shrink-0 text-amber" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Folder, { className: "size-4 shrink-0 text-violet" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "min-w-0 flex-1 truncate",
-								children: folder.name
-							})]
+							className: "file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-fg hover:bg-hover",
+							children: body
 						}, folder.id);
 					}),
 					shownDocs.map((doc) => {
 						const sealed = !!Number(doc.password_protected);
 						const corrupted = !!Number(doc.corrupted);
 						const active = activeId === doc.id;
-						return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						const body = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+							sealed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Lock, { className: "size-4 shrink-0 text-amber" }) : corrupted ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TriangleAlert, { className: "size-4 shrink-0 text-danger" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileText, { className: "size-4 shrink-0 text-cyan-dim" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "min-w-0 flex-1 truncate",
+								children: doc.title
+							}),
+							doc.file_size ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "shrink-0 text-xs text-dim",
+								children: doc.file_size
+							}) : null
+						] });
+						const tone = cx("flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm", active ? "bg-cyan/10 text-cyan" : "text-fg", corrupted && "text-danger");
+						if (locked) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: tone,
+							children: body
+						}, doc.id);
+						return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 							type: "button",
-							disabled: locked,
 							onClick: () => {
-								if (locked) return;
 								playTick();
 								onOpenDoc(doc);
 							},
-							className: cx("file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-hover disabled:opacity-60", active ? "bg-cyan/10 text-cyan" : "text-fg", corrupted && "text-danger"),
-							children: [
-								sealed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Lock, { className: "size-4 shrink-0 text-amber" }) : corrupted ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TriangleAlert, { className: "size-4 shrink-0 text-danger" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FileText, { className: "size-4 shrink-0 text-cyan-dim" }),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "min-w-0 flex-1 truncate",
-									children: doc.title
-								}),
-								doc.file_size ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "shrink-0 text-xs text-dim",
-									children: doc.file_size
-								}) : null
-							]
+							className: cx(tone, "file-in hover:bg-hover"),
+							children: body
 						}, doc.id);
 					}),
 					note ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
@@ -3653,7 +3677,7 @@ function DocImage({ src }) {
 		onError: () => setFailed(true)
 	});
 }
-function Viewer({ view, visible, onPassword }) {
+function Viewer({ view, visible, watching, onPassword }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: visible ? "relative min-h-0 flex-1 overflow-y-auto" : "relative hidden min-h-0 flex-1 overflow-y-auto md:block",
 		children: [
@@ -3666,11 +3690,11 @@ function Viewer({ view, visible, onPassword }) {
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 						className: "mt-4 text-sm text-fg",
-						children: "Selecione um arquivo"
+						children: watching ? "Nada aberto nesta tela" : "Selecione um arquivo"
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 						className: "mt-2 text-xs tracking-widest text-dim uppercase",
-						children: "navegue pelos arquivos"
+						children: watching ? "a pasta é o que está na tela" : "navegue pelos arquivos"
 					})
 				]
 			}) : null,
@@ -3768,6 +3792,7 @@ function Shell() {
 		id,
 		name: mirror.names[index] || String(id)
 	})) : null;
+	const pathLabel = watching && mirror ? mirror.names.length ? `~/ ${mirror.names.join(" / ")}` : "~/" : "";
 	(0, import_react.useEffect)(() => {
 		const onPointer = () => unlockSound();
 		window.addEventListener("pointerdown", onPointer);
@@ -3972,13 +3997,17 @@ function Shell() {
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: cx("min-w-0 flex-1 flex-col", tab === "files" ? "hidden md:flex" : "flex"),
 					children: [
-						seat ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						seat ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 							className: "border-b border-line px-3 py-2 text-xs tracking-widest text-dim uppercase",
-							children: watching ? `assistindo ${seat}` : "no comando"
+							children: [watching ? `assistindo ${seat}` : "no comando", pathLabel ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "ml-3 tracking-normal text-fg normal-case",
+								children: pathLabel
+							}) : null]
 						}) : null,
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Viewer, {
 							view,
 							visible: tab === "read",
+							watching,
 							onPassword: async (id, password) => {
 								if (watching) return;
 								await fetchDoc(id, password);

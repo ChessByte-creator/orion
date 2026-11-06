@@ -149,31 +149,38 @@ export function Explorer({
   }
 
   const query = filter.trim().toLowerCase();
-  const shownFolders = query ? folders.filter((folder) => folder.name.toLowerCase().includes(query)) : folders;
-  const shownDocs = query ? docs.filter((doc) => doc.title.toLowerCase().includes(query)) : docs;
+  const shownFolders = query && !locked ? folders.filter((folder) => folder.name.toLowerCase().includes(query)) : folders;
+  const shownDocs = query && !locked ? docs.filter((doc) => doc.title.toLowerCase().includes(query)) : docs;
+  const quiet = !!locked && activeId != null;
+  const shown = quiet ? (visible ? "flex md:hidden" : "hidden") : visible ? "flex" : "hidden md:flex";
 
   return (
-    <aside className={cx("min-h-0 w-full shrink-0 flex-col border-line bg-panel md:w-72 md:border-r", visible ? "flex" : "hidden md:flex")}>
-      <div className="border-b border-line px-3 py-3 text-xs tracking-widest text-dim uppercase">Sistema de arquivos</div>
-      <div className="flex min-h-11 flex-wrap items-center gap-1 border-b border-line px-2 py-1 text-xs">
-        <button type="button" onClick={goRoot} className="min-h-11 px-1 text-cyan-dim hover:text-cyan">
-          ~/
-        </button>
-        {stack.map((crumb, index) => (
-          <span key={crumb.id} className="flex items-center gap-1">
-            <span className="text-dim">/</span>
-            <button type="button" onClick={() => goTo(index)} className="min-h-11 px-1 text-cyan-dim hover:text-cyan">
-              {crumb.name}
-            </button>
-          </span>
-        ))}
-      </div>
-      {!prompt && (folders.length > 0 || docs.length > 0) ? (
+    <aside className={cx("min-h-0 w-full shrink-0 flex-col border-line bg-panel md:w-72 md:border-r", shown)}>
+      <div className="border-b border-line px-3 py-3 text-xs tracking-widest text-dim uppercase">{locked ? "Na tela" : "Sistema de arquivos"}</div>
+      {locked ? (
+        <p className="border-b border-line px-3 py-3 text-xs leading-relaxed text-dim">
+          {stack.length ? `~/ ${stack.map((crumb) => crumb.name).join(" / ")}` : "~/"}
+        </p>
+      ) : (
+        <div className="flex min-h-11 flex-wrap items-center gap-1 border-b border-line px-2 py-1 text-xs">
+          <button type="button" onClick={goRoot} className="min-h-11 px-1 text-cyan-dim hover:text-cyan">
+            ~/
+          </button>
+          {stack.map((crumb, index) => (
+            <span key={crumb.id} className="flex items-center gap-1">
+              <span className="text-dim">/</span>
+              <button type="button" onClick={() => goTo(index)} className="min-h-11 px-1 text-cyan-dim hover:text-cyan">
+                {crumb.name}
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {!locked && !prompt && (folders.length > 0 || docs.length > 0) ? (
         <div className="border-b border-line px-3 py-2">
           <input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            disabled={locked}
             placeholder="filtrar nesta pasta"
             className="min-h-11 w-full border border-line bg-bg px-3 text-sm text-bright outline-none focus:border-cyan"
           />
@@ -196,7 +203,7 @@ export function Explorer({
           )
         ) : (
           <>
-            {stack.length > 0 ? (
+            {stack.length > 0 && !locked ? (
               <button type="button" onClick={goBack} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-dim hover:bg-hover hover:text-bright">
                 <ChevronLeft className="size-4" aria-hidden="true" />
                 ..
@@ -204,13 +211,24 @@ export function Explorer({
             ) : null}
             {shownFolders.map((folder) => {
               const sealed = !!Number(folder.password_protected);
+              const body = (
+                <>
+                  {sealed ? <Lock className="size-4 shrink-0 text-amber" /> : <Folder className="size-4 shrink-0 text-violet" />}
+                  <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+                </>
+              );
+              if (locked) {
+                return (
+                  <div key={folder.id} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-fg">
+                    {body}
+                  </div>
+                );
+              }
               return (
                 <button
                   key={folder.id}
                   type="button"
-                  disabled={locked}
                   onClick={() => {
-                    if (locked) return;
                     playTick();
                     onNavigate();
                     setFilter("");
@@ -219,10 +237,9 @@ export function Explorer({
                     record("pasta", path);
                     setStack((current) => [...current, { id: folder.id, name: folder.name }]);
                   }}
-                  className="file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-fg hover:bg-hover disabled:opacity-60"
+                  className="file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-fg hover:bg-hover"
                 >
-                  {sealed ? <Lock className="size-4 shrink-0 text-amber" /> : <Folder className="size-4 shrink-0 text-violet" />}
-                  <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+                  {body}
                 </button>
               );
             })}
@@ -230,22 +247,8 @@ export function Explorer({
               const sealed = !!Number(doc.password_protected);
               const corrupted = !!Number(doc.corrupted);
               const active = activeId === doc.id;
-              return (
-                <button
-                  key={doc.id}
-                  type="button"
-                  disabled={locked}
-                  onClick={() => {
-                    if (locked) return;
-                    playTick();
-                    onOpenDoc(doc);
-                  }}
-                  className={cx(
-                    "file-in flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-hover disabled:opacity-60",
-                    active ? "bg-cyan/10 text-cyan" : "text-fg",
-                    corrupted && "text-danger",
-                  )}
-                >
+              const body = (
+                <>
                   {sealed ? (
                     <Lock className="size-4 shrink-0 text-amber" />
                   ) : corrupted ? (
@@ -255,6 +258,31 @@ export function Explorer({
                   )}
                   <span className="min-w-0 flex-1 truncate">{doc.title}</span>
                   {doc.file_size ? <span className="shrink-0 text-xs text-dim">{doc.file_size}</span> : null}
+                </>
+              );
+              const tone = cx(
+                "flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm",
+                active ? "bg-cyan/10 text-cyan" : "text-fg",
+                corrupted && "text-danger",
+              );
+              if (locked) {
+                return (
+                  <div key={doc.id} className={tone}>
+                    {body}
+                  </div>
+                );
+              }
+              return (
+                <button
+                  key={doc.id}
+                  type="button"
+                  onClick={() => {
+                    playTick();
+                    onOpenDoc(doc);
+                  }}
+                  className={cx(tone, "file-in hover:bg-hover")}
+                >
+                  {body}
                 </button>
               );
             })}

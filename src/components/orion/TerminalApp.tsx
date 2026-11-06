@@ -32,6 +32,7 @@ function Shell() {
   const followed = useRef<number | null>(null);
   const watching = !!seat && seat !== playerName;
   const follow = watching && mirror ? mirror.path.map((id, index) => ({ id, name: mirror.names[index] || String(id) })) : null;
+  const pathLabel = watching && mirror ? (mirror.names.length ? `~/ ${mirror.names.join(" / ")}` : "~/") : "";
 
   useEffect(() => {
     const onPointer = () => unlockSound();
@@ -207,11 +208,13 @@ function Shell() {
           {seat ? (
             <p className="border-b border-line px-3 py-2 text-xs tracking-widest text-dim uppercase">
               {watching ? `assistindo ${seat}` : "no comando"}
+              {pathLabel ? <span className="ml-3 tracking-normal text-fg normal-case">{pathLabel}</span> : null}
             </p>
           ) : null}
           <Viewer
             view={view}
             visible={tab === "read"}
+            watching={watching}
             onPassword={async (id, password) => {
               if (watching) return;
               await fetchDoc(id, password);

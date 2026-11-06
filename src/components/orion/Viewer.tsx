@@ -32,10 +32,12 @@ function DocImage({ src }: { src: string }) {
 export function Viewer({
   view,
   visible,
+  watching,
   onPassword,
 }: {
   view: DocView | null;
   visible: boolean;
+  watching?: boolean;
   onPassword: (id: number, password: string) => Promise<void>;
 }) {
   return (
@@ -43,8 +45,8 @@ export function Viewer({
       {!view ? (
         <div className="flex flex-col items-center px-6 pt-16 text-center">
           <Terminal className="size-8 text-line-lit" aria-hidden="true" />
-          <p className="mt-4 text-sm text-fg">Selecione um arquivo</p>
-          <p className="mt-2 text-xs tracking-widest text-dim uppercase">navegue pelos arquivos</p>
+          <p className="mt-4 text-sm text-fg">{watching ? "Nada aberto nesta tela" : "Selecione um arquivo"}</p>
+          <p className="mt-2 text-xs tracking-widest text-dim uppercase">{watching ? "a pasta é o que está na tela" : "navegue pelos arquivos"}</p>
         </div>
       ) : null}
       {view?.kind === "loading" ? <p className="px-6 py-8 text-xs text-dim">carregando...</p> : null}
